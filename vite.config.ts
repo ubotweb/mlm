@@ -4,10 +4,7 @@ import pages from '@hono/vite-cloudflare-pages'
 
 export default defineConfig({
   plugins: [
-    honox({
-      clientEntryPoint: './app/client.ts',
-      serverEntryPoint: './src/server.ts'
-    }),
+    honox(), 
     pages()
   ],
   build: {
