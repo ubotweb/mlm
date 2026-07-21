@@ -2,10 +2,55 @@ import { Hono } from 'hono'
 import { sign, verify } from 'hono/jwt'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 
+// --- MENGIMPOR SEMUA SUB-ROUTES API ---
+import registerApi from './register'
+import networkApi from './network'
+import checkoutApi from './checkout'
+import webhookApi from './webhook'
+import withdrawApi from './withdraw'
+import bonusApi from './bonus'
+import orderApi from './order'
+import profileApi from './profile'
+import downlineApi from './downline'
+
+import adminApi from './admin'
+import adminActionApi from './admin-action'
+import adminProductApi from './admin-product'
+import adminMemberApi from './admin-member'
+import adminOrderApi from './admin-order'
+import adminBroadcastApi from './admin-broadcast'
+import adminSettingsApi from './admin-settings'
+import adminBonusApi from './admin-bonus'
+
 const api = new Hono<{ Bindings: Env; Variables: { jwtPayload: any } }>()
 
-// --- MIDDLEWARE AUTH (Membaca JWT dari Cookie & verifikasi HS256) ---
-api.use('/member/*', async (c, next) => {
+// --- MOUNTING ROUTER (Mendaftarkan Endpoint) ---
+api.route('/register', registerApi)
+api.route('/checkout', checkoutApi)
+api.route('/webhook', webhookApi)
+
+// Routing Area Member
+api.route('/member/network', networkApi)
+api.route('/member/withdraw', withdrawApi)
+api.route('/member/bonus', bonusApi)
+api.route('/member/orders', orderApi)
+api.route('/member/settings', profileApi)
+api.route('/member/downlines', downlineApi)
+
+// Routing Area Admin
+api.route('/admin/stats', adminApi) // Jika root admin.ts menggunakan get('/stats')
+api.route('/admin/action', adminActionApi)
+api.route('/admin/products', adminProductApi)
+api.route('/admin/members', adminMemberApi)
+api.route('/admin/orders', adminOrderApi)
+api.route('/admin/broadcasts', adminBroadcastApi)
+api.route('/admin/settings', adminSettingsApi)
+api.route('/admin/bonuses', adminBonusApi)
+
+
+// --- MIDDLEWARE AUTH UNTUK ENDPOINT DASAR DI INDEX ---
+// Digunakan hanya untuk endpoint 'profile' dasar di bawah ini
+api.use('/profile-basic/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   
   if (!token) {
@@ -13,7 +58,6 @@ api.use('/member/*', async (c, next) => {
   }
 
   try {
-    // Verifikasi secara eksplisit menggunakan HS256 dan secret dari Env
     const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
     c.set('jwtPayload', decoded)
     await next()
@@ -24,26 +68,23 @@ api.use('/member/*', async (c, next) => {
 
 // --- ENDPOINT LOGIN ---
 api.post('/login', async (c) => {
-  // Simulasi body request
   const body = await c.req.json()
   
-  // LOGIKA VERIFIKASI KE DATABASE D1 HARUSNYA DI SINI
-  // if (userIsValid) { ... }
+  // Catatan: Logika verifikasi ke DB seharusnya ditambahkan di sini.
+  // Contoh: const user = await c.env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(body.username).first()
   
   if (body.username && body.password) {
     const payload = {
       sub: body.username,
-      role: 'member',
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // Expired 24 jam
+      role: 'member', // Ganti secara dinamis berdasarkan data DB (member/admin)
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 
     }
     
-    // Sign JWT secara eksplisit menggunakan HS256
     const token = await sign(payload, c.env.JWT_SECRET, 'HS256')
     
-    // Set Cookie yang aman
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
-      secure: true,       // Harus true jika di production (HTTPS)
+      secure: true,       
       sameSite: 'Strict',
       path: '/',
       maxAge: 60 * 60 * 24
@@ -63,7 +104,7 @@ api.post('/logout', async (c) => {
 
 // --- ENDPOINT PUBLIK ---
 api.get('/products', async (c) => {
-  // Dalam real-case, fetch dari c.env.DB menggunakan query SQL
+  // Dalam real-case, Anda bisa melakukan fetch dari c.env.DB
   return c.json([
     { id: '1', name: 'Facial Wash', price: 75000, category: 'Skincare' },
     { id: '2', name: 'Brightening Serum', price: 125000, category: 'Skincare' },
@@ -71,8 +112,8 @@ api.get('/products', async (c) => {
   ])
 })
 
-// --- ENDPOINT PROTECTED (Hanya bisa diakses jika Cookie valid) ---
-api.get('/member/profile', async (c) => {
+// --- ENDPOINT PROTECTED (Contoh fallback dasar) ---
+api.get('/profile-basic', async (c) => {
   const payload = c.get('jwtPayload')
   return c.json({ 
     message: 'Selamat datang di Member Area', 
