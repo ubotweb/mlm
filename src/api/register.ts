@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 
 const registerApi = new Hono<{ Bindings: Env }>()
 
-// Fungsi Helper untuk Hashing Password dengan Web Crypto API (SHA-256)
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(password)
@@ -13,43 +12,45 @@ async function hashPassword(password: string): Promise<string> {
 
 registerApi.post('/', async (c) => {
   try {
-    const body = await c.req.json()
-    const { username, email, password, fullName, phone, sponsorId } = body
+    // Tangkap data dari Native Form Submit
+    const body = await c.req.parseBody()
+    const username = body.username as string
+    const email = body.email as string
+    const password = body.password as string
+    const fullName = body.fullName as string
+    const phone = body.phone as string
+    const sponsorId = body.sponsorId as string
     
     const db = c.env.DB
 
-    // 1. Validasi apakah username / email sudah terdaftar
     const existingUser = await db.prepare(
       "SELECT id FROM users WHERE username = ? OR email = ?"
     ).bind(username, email).first()
 
     if (existingUser) {
-      return c.json({ error: 'Username atau Email sudah digunakan!' }, 400)
+      // Kembali ke halaman register dengan pesan error
+      return c.redirect('/register?error=Username atau Email sudah digunakan!')
     }
 
-    // 2. Hash Password
     const hashedPassword = await hashPassword(password)
-    const newUserId = crypto.randomUUID() // Built-in Cloudflare Workers UUID
+    const newUserId = crypto.randomUUID()
 
-    // 3. Validasi Sponsor (Jika Ada)
     let finalSponsorId = null
     if (sponsorId) {
       const sponsor = await db.prepare("SELECT id FROM users WHERE username = ?").bind(sponsorId).first()
-      if (sponsor) {
-        finalSponsorId = sponsor.id
-      }
+      if (sponsor) finalSponsorId = sponsor.id
     }
 
-    // 4. Masukkan ke Database (Default paket Starter jika belum bayar)
     await db.prepare(
       `INSERT INTO users (id, username, email, password_hash, full_name, phone, sponsor_id, package_id) 
        VALUES (?, ?, ?, ?, ?, ?, ?, 'pkg_starter')`
     ).bind(newUserId, username, email, hashedPassword, fullName, phone, finalSponsorId).run()
 
-    return c.json({ message: 'Registrasi berhasil', userId: newUserId }, 201)
+    // Redirect ke login dengan notifikasi sukses
+    return c.redirect('/login?success=Pendaftaran berhasil, silakan masuk.')
 
   } catch (error: any) {
-    return c.json({ error: 'Terjadi kesalahan pada server' }, 500)
+    return c.redirect('/register?error=Terjadi kesalahan pada server')
   }
 })
 
