@@ -1,17 +1,27 @@
+import { createRoute } from 'honox/factory'
+import { getCookie } from 'hono/cookie'
+import { verify } from 'hono/jwt'
+import { MemberLayout } from '../../components/MemberLayout'
 import DownlineList from '../../islands/DownlineList'
 
-export default function DownlinePage() {
-  return (
-    <div class="min-h-screen bg-gray-50 flex flex-col">
-      <header class="bg-blue-900 shadow">
-        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 flex justify-between items-center">
-          <h1 class="text-2xl font-bold text-white">Daftar Downline Langsung</h1>
-          <a href="/member" class="text-blue-200 hover:text-white transition">Kembali ke Dashboard</a>
-        </div>
-      </header>
-      <main class="flex-grow w-full max-w-5xl mx-auto py-8 px-4">
-        <DownlineList />
-      </main>
-    </div>
+export default createRoute(async (c) => {
+  const token = getCookie(c, 'auth_token')
+  if (!token) return c.redirect('/login')
+  
+  let profile: any
+  try { profile = await verify(token, c.env.JWT_SECRET, 'HS256') } 
+  catch (err) { return c.redirect('/login') }
+
+  const db = c.env.DB
+  const user = await db.prepare("SELECT balance FROM users WHERE username = ?").bind(profile.sub).first()
+  
+  return c.render(
+    <MemberLayout profile={profile} balance={(user?.balance as number) || 0} activeMenu="Referral & Downline">
+      <div>
+        <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Program Afiliasi / Referral</h3>
+        <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-8">Ajak teman bergabung dan dapatkan komisi pasif untuk setiap penjualan produk!</p>
+        <DownlineList username={profile.sub} />
+      </div>
+    </MemberLayout>
   )
-}
+})
