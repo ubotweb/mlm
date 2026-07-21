@@ -67,33 +67,40 @@ api.use('/profile-basic/*', async (c, next) => {
 })
 
 // --- ENDPOINT LOGIN ---
+// --- ENDPOINT LOGIN ---
 api.post('/login', async (c) => {
-  const body = await c.req.json()
+  // Tangkap form data (bukan json)
+  const body = await c.req.parseBody()
+  const username = body.username as string
+  const password = body.password as string
   
-  // Catatan: Logika verifikasi ke DB seharusnya ditambahkan di sini.
-  // Contoh: const user = await c.env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(body.username).first()
-  
-  if (body.username && body.password) {
+  if (username && password) {
+    // [!] LOGIKA VERIFIKASI KE DATABASE D1 HARUSNYA DI SINI
+    
     const payload = {
-      sub: body.username,
-      role: 'member', // Ganti secara dinamis berdasarkan data DB (member/admin)
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 
+      sub: username,
+      role: 'member',
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // Expired 24 jam
     }
     
+    // Sign JWT secara eksplisit menggunakan HS256
     const token = await sign(payload, c.env.JWT_SECRET, 'HS256')
     
+    // Set Cookie yang aman
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
-      secure: true,       
+      secure: true, 
       sameSite: 'Strict',
       path: '/',
       maxAge: 60 * 60 * 24
     })
     
-    return c.json({ message: 'Login berhasil' })
+    // Redirect langsung ke Dashboard Member
+    return c.redirect('/member')
   }
   
-  return c.json({ error: 'Username atau password salah' }, 401)
+  // Redirect kembali ke halaman login jika gagal
+  return c.redirect('/login?error=Username atau password salah')
 })
 
 // --- ENDPOINT LOGOUT ---
