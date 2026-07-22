@@ -4,42 +4,43 @@ import { getCookie } from 'hono/cookie'
 
 const adminProductApi = new Hono<{ Bindings: Env }>()
 
-// 1. MIDDLEWARE YANG BENAR UNTUK CLOUDFLARE PAGES
+// 1. MIDDLEWARE AUTENTIKASI AMAN
 adminProductApi.use('/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
-  try {
-    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
-    if (decoded.role !== 'admin') return c.redirect('/member')
-    
-    // Cukup di-await saja, JANGAN pakai 'return'
-    await next() 
-  } catch (err) { 
-    return c.redirect('/login') 
+  
+  const decoded = await verify(token, c.env.JWT_SECRET, 'HS256').catch(() => null)
+  if (!decoded || decoded.role !== 'admin') {
+    return c.redirect('/member')
   }
+  
+  await next()
 })
 
-// 2. FUNGSI UPLOAD CLOUDINARY (Native Web Crypto SHA-1)
+// 2. FUNGSI UPLOAD CLOUDINARY (Konversi File -> Blob Native)
 async function uploadToCloudinary(file: File, env: Env): Promise<string> {
   const cloudName = env.CLOUDINARY_CLOUD_NAME
   const apiKey = env.CLOUDINARY_API_KEY
   const apiSecret = env.CLOUDINARY_API_SECRET
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Kredensial Cloudinary (Cloud Name, API Key, Secret) belum diatur di sistem!")
+    throw new Error("Kredensial API Cloudinary belum disetting di Environment Variables.")
   }
 
-  // Generate Signature Keamanan Cloudinary
+  // Buat Signature SHA-1 (Web Crypto API)
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const strToSign = `timestamp=${timestamp}${apiSecret}`
-  
   const encoder = new TextEncoder()
   const data = encoder.encode(strToSign)
   const hashBuffer = await crypto.subtle.digest('SHA-1', data)
   const signature = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 
+  // PERBAIKAN FATAL: Ekstrak File Hono menjadi Blob Native Cloudflare
+  const fileBuffer = await file.arrayBuffer()
+  const nativeBlob = new Blob([fileBuffer], { type: file.type })
+
   const formData = new FormData()
-  formData.append('file', file)
+  formData.append('file', nativeBlob, file.name || 'upload.jpg')
   formData.append('api_key', apiKey)
   formData.append('timestamp', timestamp)
   formData.append('signature', signature)
@@ -51,20 +52,20 @@ async function uploadToCloudinary(file: File, env: Env): Promise<string> {
 
   const result: any = await res.json()
   if (!res.ok) {
-    throw new Error(result.error?.message || "Gagal mengunggah gambar ke Cloudinary")
+    throw new Error(result.error?.message || "Gagal mengunggah gambar ke server Cloudinary")
   }
   return result.secure_url
 }
 
-// Handler Pembantu agar tahan terhadap URL dengan atau tanpa garis miring (trailing slash)
-const createProductHandler = async (c: any) => {
+// 3. ROUTE CREATE PRODUK (Diganti menjadi /upload agar URL tidak ambigu)
+adminProductApi.post('/upload', async (c) => {
   try {
     const db = c.env.DB
     const body = await c.req.parseBody({ all: true })
     const fileData = body['image']
     let imageUrl = ''
     
-    // Validasi File Gambar
+    // Validasi Keberadaan Gambar
     if (fileData && typeof fileData !== 'string') {
       const f = Array.isArray(fileData) ? fileData[0] : fileData
       if (f instanceof File && f.size > 0) {
@@ -85,15 +86,11 @@ const createProductHandler = async (c: any) => {
       body.is_active ? 1 : 0
     ).run()
 
-    return c.redirect('/admin/produk?success=Produk+berhasil+ditambahkan+ke+katalog')
+    return c.redirect('/admin/produk?success=Produk+baru+berhasil+ditambahkan')
   } catch (err: any) {
     return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
-}
-
-// 3. ROUTE CREATE PRODUK BARU
-adminProductApi.post('/', createProductHandler)
-adminProductApi.post('', createProductHandler)
+})
 
 // 4. ROUTE UPDATE/EDIT PRODUK
 adminProductApi.post('/update', async (c) => {
@@ -114,7 +111,7 @@ adminProductApi.post('/update', async (c) => {
       body.bpom_number as string, body.halal_number as string, body.is_active ? 1 : 0
     ]
 
-    // Jika gambar baru diunggah, timpa URL lama
+    // Proses unggah gambar baru jika Admin memilih file
     if (fileData && typeof fileData !== 'string') {
       const f = Array.isArray(fileData) ? fileData[0] : fileData
       if (f instanceof File && f.size > 0) {
@@ -128,7 +125,7 @@ adminProductApi.post('/update', async (c) => {
     params.push(id)
 
     await db.prepare(updateQuery).bind(...params).run()
-    return c.redirect('/admin/produk?success=Informasi+produk+berhasil+diperbarui')
+    return c.redirect('/admin/produk?success=Data+produk+berhasil+diperbarui')
   } catch (err: any) {
     return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
@@ -140,7 +137,7 @@ adminProductApi.post('/delete', async (c) => {
     const db = c.env.DB
     const body = await c.req.parseBody()
     await db.prepare("DELETE FROM products WHERE id = ?").bind(body.id as string).run()
-    return c.redirect('/admin/produk?success=Produk+telah+dihapus+secara+permanen')
+    return c.redirect('/admin/produk?success=Produk+berhasil+dihapus')
   } catch (err: any) {
     return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
