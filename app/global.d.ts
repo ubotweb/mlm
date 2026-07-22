@@ -1,8 +1,12 @@
 import {} from 'hono'
-import '@hono/react-renderer'
+import { D1Database } from '@cloudflare/workers-types'
 
-declare module 'hono' {
-  interface ContextRenderer {
-    (content: string | Promise<string>, props?: { title?: string }): Response
+declare global {
+  interface Env {
+    DB: D1Database
+    JWT_SECRET: string
+    CLOUDINARY_CLOUD_NAME: string
+    CLOUDINARY_API_KEY: string
+    CLOUDINARY_API_SECRET: string
   }
 }
