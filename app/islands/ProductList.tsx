@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'hono/jsx'
 
-// Karena ini di dalam map `app/islands/`, komponen ini akan berjalan di Client-side (Browser)
 export default function ProductList() {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Fetch data dari backend (src/api)
     fetch('/api/products')
       .then(res => res.json())
       .then(data => {
@@ -20,31 +18,47 @@ export default function ProductList() {
   }, [])
 
   if (loading) {
-    return <div class="text-center py-10 text-gray-500">Memuat katalog produk...</div>
+    return (
+      <div class="flex justify-center py-10">
+        <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    )
   }
 
   return (
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
       {products.map(product => (
-        <div key={product.id} class="bg-white p-5 rounded-xl shadow-md border hover:shadow-lg transition">
-          <div class="h-40 bg-gray-200 rounded-lg mb-4 flex items-center justify-center">
-            <span class="text-gray-400">Gambar Produk</span>
+        <div key={product.id} class="bg-[#1A1E26] p-5 rounded-2xl border border-[#2D3342] hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10 transition-all group flex flex-col h-full">
+          
+          <div class="h-48 bg-[#151921] rounded-xl mb-5 flex items-center justify-center overflow-hidden border border-[#222731]">
+            {product.image_url ? (
+              <img src={product.image_url} alt={product.name} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+            ) : (
+              <span class="text-gray-500 font-medium">Gambar Produk</span>
+            )}
           </div>
-          <span class="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-1 rounded-full uppercase">
-            {product.category}
-          </span>
-          <h4 class="font-bold text-xl mt-3 text-gray-800">{product.name}</h4>
-          <p class="text-green-600 font-bold text-lg mt-1">
-            Rp {product.price.toLocaleString('id-ID')}
-          </p>
-          <div class="mt-5 flex gap-2">
-            <button class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
-              Beli Sekarang
-            </button>
-            <button class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg border hover:bg-gray-200 transition">
-              Detail
-            </button>
+          
+          <div class="flex-grow">
+            <span class="inline-block text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full uppercase tracking-wider mb-3">
+              {product.category}
+            </span>
+            <h4 class="font-bold text-lg text-white mb-2 leading-snug">{product.name}</h4>
           </div>
+          
+          <div class="mt-4 pt-4 border-t border-[#2D3342]">
+            <p class="text-emerald-400 font-bold text-xl mb-4">
+              Rp {product.price.toLocaleString('id-ID')}
+            </p>
+            <div class="flex gap-3">
+              <button class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg shadow-lg shadow-emerald-500/20 transition-all text-sm">
+                Beli Sekarang
+              </button>
+              <button class="flex-1 bg-[#2D3342] hover:bg-[#384050] text-gray-200 font-semibold py-2.5 rounded-lg transition-all text-sm">
+                Detail
+              </button>
+            </div>
+          </div>
+          
         </div>
       ))}
     </div>
