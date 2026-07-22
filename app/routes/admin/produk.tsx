@@ -49,7 +49,8 @@ export default createRoute(async (c) => {
             <h4 class="font-bold text-white text-sm">{editData ? 'Edit Produk' : 'Tambah Produk Baru'}</h4>
           </div>
           
-          <form method="POST" action={editData ? "/api/admin/produk/update" : "/api/admin/produk"} enctype="multipart/form-data" class="p-6 space-y-4">
+          {/* PERBAIKAN: Form Action diarahkan ke '/upload' atau '/update' secara presisi */}
+          <form method="POST" action={editData ? "/api/admin/produk/update" : "/api/admin/produk/upload"} enctype="multipart/form-data" class="p-6 space-y-4">
             {editData && <input type="hidden" name="id" value={editData.id} />}
             
             <div>
@@ -67,18 +68,18 @@ export default createRoute(async (c) => {
               </div>
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Stok (Pcs)</label>
-                <input type="number" name="stock" required defaultValue={editData?.stock || 0} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-bold rounded-lg px-4 py-3 focus:outline-none text-sm" />
+                <input type="number" name="stock" required defaultValue={editData?.stock ?? 0} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-bold rounded-lg px-4 py-3 focus:outline-none text-sm" />
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Harga Normal</label>
-                <input type="number" name="price" required defaultValue={editData?.price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#00E676] font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" />
+                <input type="number" name="price" required defaultValue={editData?.price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#00E676] font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" placeholder="150000" />
               </div>
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Harga Member</label>
-                <input type="number" name="member_price" required defaultValue={editData?.member_price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-blue-400 font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" />
+                <input type="number" name="member_price" required defaultValue={editData?.member_price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-blue-400 font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" placeholder="125000" />
               </div>
             </div>
 
@@ -106,7 +107,6 @@ export default createRoute(async (c) => {
                   <p class="text-[10px] text-[#8B949E] mt-2">Abaikan form upload jika tidak ingin mengganti.</p>
                 </div>
               )}
-              {/* Type File untuk upload gambar fisik */}
               <input type="file" accept="image/*" name="image" class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#8B949E] rounded-lg px-4 py-3 focus:outline-none text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#1A1E26] file:text-white hover:file:bg-[#222731]" />
             </div>
 
@@ -140,7 +140,7 @@ export default createRoute(async (c) => {
               </thead>
               <tbody class="divide-y divide-[#222731]">
                 {products.length === 0 ? (
-                   <tr><td colSpan={4} class="px-6 py-8 text-center text-[#8B949E]">Belum ada produk.</td></tr>
+                   <tr><td colSpan={4} class="px-6 py-8 text-center text-[#8B949E]">Belum ada produk terdaftar.</td></tr>
                 ) : products.map((p: any) => (
                   <tr class="hover:bg-[#1A1E26] transition-colors">
                     <td class="px-4 py-4 flex items-center space-x-3">
