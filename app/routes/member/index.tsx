@@ -15,7 +15,6 @@ export default createRoute(async (c) => {
   const user = await db.prepare("SELECT balance FROM users WHERE username = ?").bind(profile.sub).first()
   const downlineStats = await db.prepare("SELECT COUNT(*) as count FROM users WHERE sponsor_id = (SELECT id FROM users WHERE username = ?)").bind(profile.sub).first()
   
-  // Ambil downline terbaru untuk tabel
   const { results: recentDownlines } = await db.prepare(`
     SELECT u.full_name, u.status, p.name as package_name, u.created_at
     FROM users u LEFT JOIN packages p ON u.package_id = p.id
@@ -34,13 +33,13 @@ export default createRoute(async (c) => {
           <p class="text-[#8B949E] text-sm mt-1">Pantau performa jaringan dan perputaran bonus Anda hari ini.</p>
         </div>
         <div class="flex space-x-3">
-          <a href="/member/withdraw" class="px-4 py-2 bg-[#1A1E26] border border-[#2D3342] text-gray-300 hover:text-white rounded-lg text-sm font-bold transition-colors flex items-center">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
-            Tarik Saldo
+          <a href="/member/upgrade" class="px-4 py-2 bg-[#1A1E26] border border-[#2D3342] text-blue-400 hover:text-white rounded-lg text-sm font-bold transition-colors flex items-center">
+             Upgrade Paket
           </a>
-          <a href="/checkout" class="px-4 py-2 bg-[#00E676] hover:bg-[#00C853] text-[#0B0E14] rounded-lg text-sm font-bold transition-colors flex items-center">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-            Order Baru
+          {/* Tombol diperbarui agar mengarah ke Belanja RO */}
+          <a href="/member/belanja" class="px-4 py-2 bg-[#00E676] hover:bg-[#00C853] text-[#0B0E14] rounded-lg text-sm font-bold transition-colors flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+            Repeat Order
           </a>
         </div>
       </div>
