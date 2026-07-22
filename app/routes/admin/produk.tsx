@@ -13,17 +13,14 @@ export default createRoute(async (c) => {
   } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  
-  // Tangkap param Edit jika ada
   const editId = c.req.query('edit')
   let editData: any = null
+  
   if (editId) {
     editData = await db.prepare("SELECT * FROM products WHERE id = ?").bind(editId).first()
   }
 
-  // Tarik daftar semua produk
   const { results: products } = await db.prepare("SELECT * FROM products ORDER BY created_at DESC").all()
-  
   const successMsg = c.req.query('success')
   const errorMsg = c.req.query('error')
 
@@ -46,7 +43,7 @@ export default createRoute(async (c) => {
 
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
-        {/* Form Tambah / Edit Produk */}
+        {/* Form Tambah/Edit dengan Multipart Form Data */}
         <div class="xl:col-span-1 bg-[#151921] border border-[#222731] rounded-xl overflow-hidden shadow-sm h-fit">
           <div class="bg-[#1A1E26] px-6 py-4 border-b border-[#222731]">
             <h4 class="font-bold text-white text-sm">{editData ? 'Edit Produk' : 'Tambah Produk Baru'}</h4>
@@ -77,11 +74,11 @@ export default createRoute(async (c) => {
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Harga Normal</label>
-                <input type="number" name="price" required defaultValue={editData?.price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#00E676] font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" placeholder="150000" />
+                <input type="number" name="price" required defaultValue={editData?.price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#00E676] font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" />
               </div>
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Harga Member</label>
-                <input type="number" name="member_price" required defaultValue={editData?.member_price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-blue-400 font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" placeholder="125000" />
+                <input type="number" name="member_price" required defaultValue={editData?.member_price || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-blue-400 font-bold rounded-lg px-4 py-3 focus:outline-none text-sm tracking-widest" />
               </div>
             </div>
 
@@ -102,14 +99,15 @@ export default createRoute(async (c) => {
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Foto Produk (Cloudinary)</label>
+              <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Foto Produk (Upload)</label>
               {editData?.image_url && (
-                <div class="mb-3">
-                  <img src={editData.image_url} alt="Current" class="h-20 rounded border border-[#222731]" />
-                  <p class="text-[10px] text-gray-500 mt-1">Biarkan kosong jika tidak ingin mengubah gambar.</p>
+                <div class="mb-3 p-2 bg-[#0B0E14] border border-[#2D3342] rounded-lg w-max">
+                  <img src={editData.image_url} alt="Current" class="h-20 rounded" />
+                  <p class="text-[10px] text-[#8B949E] mt-2">Abaikan form upload jika tidak ingin mengganti.</p>
                 </div>
               )}
-              <input type="file" accept="image/*" name="image" class="w-full bg-[#0B0E14] border border-[#2D3342] text-gray-400 rounded-lg px-4 py-3 focus:outline-none text-xs" />
+              {/* Type File untuk upload gambar fisik */}
+              <input type="file" accept="image/*" name="image" class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#8B949E] rounded-lg px-4 py-3 focus:outline-none text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#1A1E26] file:text-white hover:file:bg-[#222731]" />
             </div>
 
             <div class="pt-4 border-t border-[#222731]">
@@ -144,22 +142,22 @@ export default createRoute(async (c) => {
                 {products.length === 0 ? (
                    <tr><td colSpan={4} class="px-6 py-8 text-center text-[#8B949E]">Belum ada produk.</td></tr>
                 ) : products.map((p: any) => (
-                  <tr class="hover:bg-[#1A1E26]">
+                  <tr class="hover:bg-[#1A1E26] transition-colors">
                     <td class="px-4 py-4 flex items-center space-x-3">
                       {p.image_url ? (
                         <img src={p.image_url} alt={p.name} class="w-12 h-12 rounded-lg object-cover border border-[#222731]" />
                       ) : (
-                        <div class="w-12 h-12 rounded-lg bg-[#0B0E14] border border-[#222731] flex items-center justify-center text-[10px] text-gray-500 font-bold">NO IMG</div>
+                        <div class="w-12 h-12 rounded-lg bg-[#0B0E14] border border-[#222731] flex items-center justify-center text-[10px] text-gray-500 font-bold text-center">NO<br/>IMG</div>
                       )}
                       <div>
                         <p class="font-bold text-white leading-tight">{p.name}</p>
-                        <p class="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{p.category}</p>
+                        <p class="text-[10px] text-[#8B949E] uppercase tracking-wider mt-0.5">{p.category}</p>
                       </div>
                     </td>
                     <td class="px-4 py-4">
-                      <p class="text-xs text-gray-400 line-through">Rp {p.price.toLocaleString('id-ID')}</p>
+                      <p class="text-xs text-gray-500 line-through mb-0.5">Rp {p.price.toLocaleString('id-ID')}</p>
                       <p class="font-black text-[#00E676]">Rp {p.member_price.toLocaleString('id-ID')}</p>
-                      <p class="text-[10px] font-bold text-yellow-500 mt-1">Sisa Stok: {p.stock}</p>
+                      <p class="text-[10px] font-bold text-yellow-500 mt-1">Stok: {p.stock}</p>
                     </td>
                     <td class="px-4 py-4">
                       <span class={`text-[10px] px-2 py-1 rounded uppercase font-bold border ${p.is_active ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
@@ -168,10 +166,10 @@ export default createRoute(async (c) => {
                     </td>
                     <td class="px-4 py-4 text-right">
                       <div class="flex flex-col items-end space-y-2">
-                        <a href={`/admin/produk?edit=${p.id}`} class="text-blue-400 hover:text-blue-300 font-bold text-xs bg-blue-500/10 px-3 py-1 rounded w-max">Edit</a>
+                        <a href={`/admin/produk?edit=${p.id}`} class="text-blue-400 hover:text-blue-300 font-bold text-xs bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-lg w-max transition-colors">Edit</a>
                         <form method="POST" action="/api/admin/produk/delete" onsubmit="return confirm('Yakin ingin menghapus produk ini secara permanen?');">
                           <input type="hidden" name="id" value={p.id} />
-                          <button type="submit" class="text-red-400 hover:text-red-300 font-bold text-xs bg-red-500/10 px-3 py-1 rounded w-max">Hapus</button>
+                          <button type="submit" class="text-red-400 hover:text-red-300 font-bold text-xs bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-lg w-max transition-colors">Hapus</button>
                         </form>
                       </div>
                     </td>
