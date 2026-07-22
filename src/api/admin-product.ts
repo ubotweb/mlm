@@ -4,30 +4,33 @@ import { getCookie } from 'hono/cookie'
 
 const adminProductApi = new Hono<{ Bindings: Env }>()
 
-// Middleware Autentikasi Admin
+// 1. MIDDLEWARE YANG BENAR UNTUK CLOUDFLARE
 adminProductApi.use('/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
   try {
     const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
     if (decoded.role !== 'admin') return c.redirect('/member')
-    await next()
+    
+    // SANGAT PENTING: Harus di-return agar resolve ke Response
+    return await next() 
   } catch (err) { return c.redirect('/login') }
 })
 
-// Fungsi Helper Upload ke Cloudinary
+// 2. FUNGSI UPLOAD CLOUDINARY (Native SHA-1 Web Crypto)
 async function uploadToCloudinary(file: File, env: Env): Promise<string> {
   const cloudName = env.CLOUDINARY_CLOUD_NAME
   const apiKey = env.CLOUDINARY_API_KEY
   const apiSecret = env.CLOUDINARY_API_SECRET
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Kredensial Cloudinary belum diatur di Environment Variables")
+    throw new Error("Kredensial API Cloudinary belum diatur di sistem!")
   }
 
-  // Buat Signature SHA-1
+  // Generate Signature untuk Keamanan Cloudinary
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const strToSign = `timestamp=${timestamp}${apiSecret}`
+  
   const encoder = new TextEncoder()
   const data = encoder.encode(strToSign)
   const hashBuffer = await crypto.subtle.digest('SHA-1', data)
@@ -46,21 +49,25 @@ async function uploadToCloudinary(file: File, env: Env): Promise<string> {
 
   const result: any = await res.json()
   if (!res.ok) {
-    throw new Error(result.error?.message || "Gagal mengunggah ke Cloudinary")
+    throw new Error(result.error?.message || "Gagal mengunggah gambar ke Cloudinary")
   }
   return result.secure_url
 }
 
-// CREATE: Tambah Produk Baru
+// 3. HANDLER CREATE PRODUK BARU
 adminProductApi.post('/', async (c) => {
   const db = c.env.DB
   try {
-    const body = await c.req.parseBody()
-    const file = body['image'] as File
+    const body = await c.req.parseBody({ all: true }) // Izinkan parsing file
+    const fileData = body['image']
     let imageUrl = ''
     
-    if (file && file.size > 0) {
-       imageUrl = await uploadToCloudinary(file, c.env)
+    // Pastikan validasi bahwa file benar-benar dipilih
+    if (fileData && typeof fileData !== 'string') {
+      const f = Array.isArray(fileData) ? fileData[0] : fileData
+      if (f instanceof File && f.size > 0) {
+        imageUrl = await uploadToCloudinary(f, c.env)
+      }
     }
 
     const id = crypto.randomUUID()
@@ -76,19 +83,20 @@ adminProductApi.post('/', async (c) => {
       body.is_active ? 1 : 0
     ).run()
 
-    return c.redirect('/admin/produk?success=Produk berhasil ditambahkan')
+    return c.redirect('/admin/produk?success=Produk berhasil ditambahkan ke katalog.')
   } catch (err: any) {
-    return c.redirect(`/admin/produk?error=Gagal menambah produk: ${err.message}`)
+    // encodeURIComponent WAJIB MENCEGAH HEADER ERROR 500
+    return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
 })
 
-// UPDATE: Edit Produk
+// 4. HANDLER UPDATE/EDIT PRODUK
 adminProductApi.post('/update', async (c) => {
   const db = c.env.DB
   try {
-    const body = await c.req.parseBody()
+    const body = await c.req.parseBody({ all: true })
     const id = body.id as string
-    const file = body['image'] as File
+    const fileData = body['image']
     
     let updateQuery = `
       UPDATE products SET 
@@ -101,32 +109,34 @@ adminProductApi.post('/update', async (c) => {
       body.bpom_number as string, body.halal_number as string, body.is_active ? 1 : 0
     ]
 
-    // Jika gambar baru diupload, update image_url
-    if (file && file.size > 0) {
-       const imageUrl = await uploadToCloudinary(file, c.env)
-       updateQuery += `, image_url = ?`
-       params.push(imageUrl)
+    if (fileData && typeof fileData !== 'string') {
+      const f = Array.isArray(fileData) ? fileData[0] : fileData
+      if (f instanceof File && f.size > 0) {
+         const imageUrl = await uploadToCloudinary(f, c.env)
+         updateQuery += `, image_url = ?`
+         params.push(imageUrl)
+      }
     }
 
     updateQuery += ` WHERE id = ?`
     params.push(id)
 
     await db.prepare(updateQuery).bind(...params).run()
-    return c.redirect('/admin/produk?success=Produk berhasil diperbarui')
+    return c.redirect('/admin/produk?success=Informasi produk berhasil diperbarui.')
   } catch (err: any) {
-    return c.redirect(`/admin/produk?error=Gagal memperbarui produk: ${err.message}`)
+    return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
 })
 
-// DELETE: Hapus Produk
+// 5. HANDLER DELETE PRODUK
 adminProductApi.post('/delete', async (c) => {
   const db = c.env.DB
   try {
     const body = await c.req.parseBody()
     await db.prepare("DELETE FROM products WHERE id = ?").bind(body.id as string).run()
-    return c.redirect('/admin/produk?success=Produk berhasil dihapus')
-  } catch (err) {
-    return c.redirect('/admin/produk?error=Gagal menghapus produk')
+    return c.redirect('/admin/produk?success=Produk berhasil dihapus selamanya.')
+  } catch (err: any) {
+    return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
 })
 
