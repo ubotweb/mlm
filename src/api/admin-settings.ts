@@ -4,28 +4,33 @@ import { getCookie } from 'hono/cookie'
 
 const adminSettingsApi = new Hono<{ Bindings: Env }>()
 
-adminSettingsApi.use('/*', async (c, next) => {
+adminSettingsApi.use('/', async (c, next) => {
   const token = getCookie(c, 'auth_token')
-  if (!token) return c.json({ error: 'Unauthorized' }, 401)
-  const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
-  if (decoded.role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
-  await next()
-})
-
-adminSettingsApi.get('/', async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT key, value FROM site_settings").all()
-  const settingsObj = results.reduce((acc: any, row: any) => ({ ...acc, [row.key]: row.value }), {})
-  return c.json(settingsObj)
+  if (!token) return c.redirect('/login')
+  try {
+    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
+    if (decoded.role !== 'admin') return c.redirect('/member')
+    await next()
+  } catch (err) { return c.redirect('/login') }
 })
 
 adminSettingsApi.post('/', async (c) => {
-  const body = await c.req.json()
-  const statements = Object.entries(body).map(([key, value]) => {
-    return c.env.DB.prepare("UPDATE site_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?").bind(String(value), key)
-  })
-  
-  await c.env.DB.batch(statements)
-  return c.json({ message: 'Pengaturan berhasil disimpan' })
+  const db = c.env.DB
+  try {
+    // Tangkap data Form
+    const body = await c.req.parseBody()
+    
+    // Loop dan perbarui seluruh key yang disubmit ke database
+    for (const [key, value] of Object.entries(body)) {
+      await db.prepare(
+        "UPDATE site_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?"
+      ).bind(value as string, key).run()
+    }
+    
+    return c.redirect('/admin/pengaturan?success=Pengaturan website berhasil disimpan')
+  } catch (err) {
+    return c.redirect('/admin/pengaturan?error=Gagal menyimpan pengaturan')
+  }
 })
 
 export default adminSettingsApi
