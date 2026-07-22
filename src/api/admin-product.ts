@@ -4,7 +4,7 @@ import { getCookie } from 'hono/cookie'
 
 const adminProductApi = new Hono<{ Bindings: Env }>()
 
-// 1. MIDDLEWARE YANG BENAR UNTUK CLOUDFLARE
+// 1. MIDDLEWARE YANG BENAR UNTUK CLOUDFLARE PAGES
 adminProductApi.use('/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
@@ -12,22 +12,24 @@ adminProductApi.use('/*', async (c, next) => {
     const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
     if (decoded.role !== 'admin') return c.redirect('/member')
     
-    // SANGAT PENTING: Harus di-return agar resolve ke Response
-    return await next() 
-  } catch (err) { return c.redirect('/login') }
+    // Cukup di-await saja, JANGAN pakai 'return'
+    await next() 
+  } catch (err) { 
+    return c.redirect('/login') 
+  }
 })
 
-// 2. FUNGSI UPLOAD CLOUDINARY (Native SHA-1 Web Crypto)
+// 2. FUNGSI UPLOAD CLOUDINARY (Native Web Crypto SHA-1)
 async function uploadToCloudinary(file: File, env: Env): Promise<string> {
   const cloudName = env.CLOUDINARY_CLOUD_NAME
   const apiKey = env.CLOUDINARY_API_KEY
   const apiSecret = env.CLOUDINARY_API_SECRET
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Kredensial API Cloudinary belum diatur di sistem!")
+    throw new Error("Kredensial Cloudinary (Cloud Name, API Key, Secret) belum diatur di sistem!")
   }
 
-  // Generate Signature untuk Keamanan Cloudinary
+  // Generate Signature Keamanan Cloudinary
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const strToSign = `timestamp=${timestamp}${apiSecret}`
   
@@ -54,15 +56,15 @@ async function uploadToCloudinary(file: File, env: Env): Promise<string> {
   return result.secure_url
 }
 
-// 3. HANDLER CREATE PRODUK BARU
-adminProductApi.post('/', async (c) => {
-  const db = c.env.DB
+// Handler Pembantu agar tahan terhadap URL dengan atau tanpa garis miring (trailing slash)
+const createProductHandler = async (c: any) => {
   try {
-    const body = await c.req.parseBody({ all: true }) // Izinkan parsing file
+    const db = c.env.DB
+    const body = await c.req.parseBody({ all: true })
     const fileData = body['image']
     let imageUrl = ''
     
-    // Pastikan validasi bahwa file benar-benar dipilih
+    // Validasi File Gambar
     if (fileData && typeof fileData !== 'string') {
       const f = Array.isArray(fileData) ? fileData[0] : fileData
       if (f instanceof File && f.size > 0) {
@@ -83,17 +85,20 @@ adminProductApi.post('/', async (c) => {
       body.is_active ? 1 : 0
     ).run()
 
-    return c.redirect('/admin/produk?success=Produk berhasil ditambahkan ke katalog.')
+    return c.redirect('/admin/produk?success=Produk+berhasil+ditambahkan+ke+katalog')
   } catch (err: any) {
-    // encodeURIComponent WAJIB MENCEGAH HEADER ERROR 500
     return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
-})
+}
 
-// 4. HANDLER UPDATE/EDIT PRODUK
+// 3. ROUTE CREATE PRODUK BARU
+adminProductApi.post('/', createProductHandler)
+adminProductApi.post('', createProductHandler)
+
+// 4. ROUTE UPDATE/EDIT PRODUK
 adminProductApi.post('/update', async (c) => {
-  const db = c.env.DB
   try {
+    const db = c.env.DB
     const body = await c.req.parseBody({ all: true })
     const id = body.id as string
     const fileData = body['image']
@@ -109,6 +114,7 @@ adminProductApi.post('/update', async (c) => {
       body.bpom_number as string, body.halal_number as string, body.is_active ? 1 : 0
     ]
 
+    // Jika gambar baru diunggah, timpa URL lama
     if (fileData && typeof fileData !== 'string') {
       const f = Array.isArray(fileData) ? fileData[0] : fileData
       if (f instanceof File && f.size > 0) {
@@ -122,19 +128,19 @@ adminProductApi.post('/update', async (c) => {
     params.push(id)
 
     await db.prepare(updateQuery).bind(...params).run()
-    return c.redirect('/admin/produk?success=Informasi produk berhasil diperbarui.')
+    return c.redirect('/admin/produk?success=Informasi+produk+berhasil+diperbarui')
   } catch (err: any) {
     return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
 })
 
-// 5. HANDLER DELETE PRODUK
+// 5. ROUTE DELETE PRODUK
 adminProductApi.post('/delete', async (c) => {
-  const db = c.env.DB
   try {
+    const db = c.env.DB
     const body = await c.req.parseBody()
     await db.prepare("DELETE FROM products WHERE id = ?").bind(body.id as string).run()
-    return c.redirect('/admin/produk?success=Produk berhasil dihapus selamanya.')
+    return c.redirect('/admin/produk?success=Produk+telah+dihapus+secara+permanen')
   } catch (err: any) {
     return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
   }
