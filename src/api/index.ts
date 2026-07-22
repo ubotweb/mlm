@@ -21,6 +21,7 @@ import adminOrderApi from './admin-order'
 import adminBroadcastApi from './admin-broadcast'
 import adminSettingsApi from './admin-settings'
 import adminBonusApi from './admin-bonus'
+import adminPaketApi from './admin-paket'
 
 const api = new Hono<{ Bindings: Env; Variables: { jwtPayload: any } }>()
 
@@ -46,7 +47,7 @@ api.route('/admin/orders', adminOrderApi)
 api.route('/admin/broadcasts', adminBroadcastApi)
 api.route('/admin/settings', adminSettingsApi)
 api.route('/admin/bonuses', adminBonusApi)
-
+api.route('/admin/paket', adminPaketApi)
 
 // --- MIDDLEWARE AUTH UNTUK ENDPOINT DASAR DI INDEX ---
 // Digunakan hanya untuk endpoint 'profile' dasar di bawah ini
