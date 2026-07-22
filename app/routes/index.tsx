@@ -1,44 +1,101 @@
 import { createRoute } from 'honox/factory'
+import ProductList from '../islands/ProductList' // Memanggil komponen produk
 
 export default createRoute((c) => {
-  const error = c.req.query('error')
-  const success = c.req.query('success')
-
   return c.render(
-    <div class="min-h-screen bg-[#0B0E14] flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans selection:bg-emerald-500/30">
-      <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h1 class="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-wider inline-block mb-4">
+    <div class="min-h-screen bg-[#0B0E14] text-white font-sans selection:bg-emerald-500/30">
+      
+      {/* 1. Header & Navigasi */}
+      <header class="container mx-auto px-6 py-6 flex justify-between items-center">
+        <h1 class="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-wider">
           HMM<span class="font-light text-white">BEAUTY</span>
         </h1>
-        <h2 class="text-2xl font-bold text-white">Masuk ke Akun Anda</h2>
-        <p class="mt-2 text-sm text-gray-400">
-          Belum punya akun? <a href="/register" class="font-bold text-emerald-400 hover:text-emerald-300">Daftar sekarang</a>
-        </p>
-      </div>
-
-      <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div class="bg-[#151921] py-8 px-4 shadow-xl border border-[#222731] sm:rounded-2xl sm:px-10">
-          
-          <form method="POST" action="/api/login" class="space-y-6">
-            {error && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 text-sm font-bold rounded-lg text-center">{error}</div>}
-            {success && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 text-sm font-bold rounded-lg text-center">{success}</div>}
-            
-            <div>
-              <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Username</label>
-              <input type="text" name="username" required class="w-full bg-[#1A1E26] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors" placeholder="Masukkan username Anda" />
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Password</label>
-              <input type="password" name="password" required class="w-full bg-[#1A1E26] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors" placeholder="••••••••" />
-            </div>
-            
-            <button type="submit" class="w-full flex justify-center py-3 px-4 rounded-lg shadow-lg shadow-emerald-500/20 text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition-all">
-              Masuk Dashboard
-            </button>
-          </form>
-
+        <div class="space-x-4">
+          <a href="/login" class="text-gray-300 hover:text-white font-semibold transition">Masuk</a>
+          <a href="/register" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-full font-bold transition-all shadow-lg shadow-emerald-500/20">Daftar Kemitraan</a>
         </div>
-      </div>
+      </header>
+
+      {/* 2. Hero Section (Banner) */}
+      <section class="container mx-auto px-6 py-20 text-center">
+        <h2 class="text-5xl md:text-6xl font-bold mb-6">Cantik Alami, Sehat Berkualitas,<br/> <span class="text-emerald-400">Sukses Bersama.</span></h2>
+        <p class="text-gray-400 text-lg max-w-2xl mx-auto mb-10">
+          Bergabunglah dengan jaringan HMM Beauty. Nikmati produk kesehatan & kecantikan terbaik sekaligus bangun kebebasan finansial Anda.
+        </p>
+        <a href="#paket" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-all inline-block">Mulai Perjalanan Anda</a>
+      </section>
+
+      {/* 3. Section Paket MLM */}
+      <section id="paket" class="bg-[#151921] py-20 border-y border-[#222731]">
+        <div class="container mx-auto px-6">
+          <h3 class="text-3xl font-bold text-center mb-12">Pilihan <span class="text-emerald-400">Paket Kemitraan</span></h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            {/* Starter */}
+            <div class="bg-[#1A1E26] border border-[#2D3342] p-8 rounded-2xl hover:border-emerald-500 transition-all text-center">
+              <h4 class="text-xl font-bold mb-2 text-white">Starter</h4>
+              <p class="text-emerald-400 text-3xl font-black mb-6">Rp 100Rb</p>
+              <ul class="text-sm text-gray-400 space-y-3 mb-8 text-left">
+                <li>✔️ Bonus Sponsor: Rp 20.000</li>
+                <li class="opacity-50">❌ Diskon Produk</li>
+                <li class="opacity-50">❌ Bonus Jaringan</li>
+              </ul>
+              <a href="/register?paket=starter" class="block w-full bg-[#2D3342] hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all">Pilih Starter</a>
+            </div>
+
+            {/* Silver */}
+            <div class="bg-[#1A1E26] border border-[#2D3342] p-8 rounded-2xl hover:border-emerald-500 transition-all text-center">
+              <h4 class="text-xl font-bold mb-2 text-white">Silver</h4>
+              <p class="text-emerald-400 text-3xl font-black mb-6">Rp 500Rb</p>
+              <ul class="text-sm text-gray-400 space-y-3 mb-8 text-left">
+                <li>✔️ Bonus Sponsor: Rp 50.000</li>
+                <li>✔️ Diskon Produk 10%</li>
+                <li>✔️ Bonus Jaringan</li>
+              </ul>
+              <a href="/register?paket=silver" class="block w-full bg-[#2D3342] hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all">Pilih Silver</a>
+            </div>
+
+            {/* Gold (Populer) */}
+            <div class="bg-[#1A1E26] border-2 border-blue-500 p-8 rounded-2xl relative text-center transform md:-translate-y-4 shadow-2xl shadow-blue-500/20">
+              <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wider">Terbaik</div>
+              <h4 class="text-xl font-bold mb-2 text-white mt-2">Gold</h4>
+              <p class="text-blue-400 text-3xl font-black mb-6">Rp 1,5 Jt</p>
+              <ul class="text-sm text-gray-300 space-y-3 mb-8 text-left">
+                <li>✔️ Bonus Sponsor: Rp 150.000</li>
+                <li>✔️ Diskon Produk 20%</li>
+                <li>✔️ Bonus Jaringan & Leadership</li>
+              </ul>
+              <a href="/register?paket=gold" class="block w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition-all shadow-lg">Pilih Gold</a>
+            </div>
+
+            {/* Platinum */}
+            <div class="bg-[#1A1E26] border border-[#2D3342] p-8 rounded-2xl hover:border-emerald-500 transition-all text-center">
+              <h4 class="text-xl font-bold mb-2 text-white">Platinum</h4>
+              <p class="text-emerald-400 text-3xl font-black mb-6">Rp 3 Jt</p>
+              <ul class="text-sm text-gray-400 space-y-3 mb-8 text-left">
+                <li>✔️ Bonus Sponsor: Rp 300.000</li>
+                <li>✔️ Diskon Produk 30%</li>
+                <li>✔️ Semua Bonus Terbuka</li>
+              </ul>
+              <a href="/register?paket=platinum" class="block w-full bg-[#2D3342] hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all">Pilih Platinum</a>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Section Katalog Produk Terintegrasi */}
+      <section class="container mx-auto px-6 py-20">
+        <h3 class="text-3xl font-bold text-center mb-4">Katalog <span class="text-emerald-400">Produk</span></h3>
+        <p class="text-center text-gray-400 mb-12">Rangkaian produk premium untuk menunjang kesehatan dan kecantikan Anda.</p>
+        
+        {/* Island Component untuk Produk */}
+        <ProductList />
+      </section>
+
+      <footer class="border-t border-[#222731] py-8 text-center text-sm text-gray-500">
+        &copy; {new Date().getFullYear()} HMM Beauty & Health. All rights reserved.
+      </footer>
     </div>
   )
 })
