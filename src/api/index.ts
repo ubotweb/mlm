@@ -67,42 +67,66 @@ api.use('/profile-basic/*', async (c, next) => {
 })
 
 // --- ENDPOINT LOGIN ---
-// --- ENDPOINT LOGIN ---
 api.post('/login', async (c) => {
-  // Tangkap form data (bukan json)
   const body = await c.req.parseBody()
   const username = body.username as string
   const password = body.password as string
   
-  if (username && password) {
-    // [!] LOGIKA VERIFIKASI KE DATABASE D1 HARUSNYA DI SINI
+  if (!username || !password) {
+    return c.redirect('/login?error=Username dan password wajib diisi')
+  }
+
+  try {
+    const db = c.env.DB
+
+    // 1. Cari user di database berdasarkan username
+    const user = await db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first()
     
+    if (!user) {
+      return c.redirect('/login?error=Username atau password salah')
+    }
+
+    // 2. Hash password yang diinput untuk dicocokkan dengan database
+    const encoder = new TextEncoder()
+    const data = encoder.encode(password)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+
+    // 3. Verifikasi kecocokan password
+    if (user.password_hash !== hashedPassword) {
+      return c.redirect('/login?error=Username atau password salah')
+    }
+    
+    // 4. Buat Token JWT dengan ROLE ASLI dari database
     const payload = {
-      sub: username,
-      role: 'member',
+      sub: user.username,
+      role: user.role, // Kunci perbaikannya ada di sini ('admin' atau 'member')
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // Expired 24 jam
     }
     
-    // Sign JWT secara eksplisit menggunakan HS256
     const token = await sign(payload, c.env.JWT_SECRET, 'HS256')
     
-    // Set Cookie yang aman
+    // 5. Tanamkan Cookie
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
-      secure: true, 
+      secure: true,       
       sameSite: 'Strict',
       path: '/',
       maxAge: 60 * 60 * 24
     })
     
-    // Redirect langsung ke Dashboard Member
-    return c.redirect('/member')
-  }
-  
-  // Redirect kembali ke halaman login jika gagal
-  return c.redirect('/login?error=Username atau password salah')
-})
+    // 6. Redirect cerdas berdasarkan Role
+    if (user.role === 'admin') {
+      return c.redirect('/admin')
+    } else {
+      return c.redirect('/member')
+    }
 
+  } catch (error) {
+    return c.redirect('/login?error=Terjadi kesalahan pada server')
+  }
+})
 // --- ENDPOINT LOGOUT ---
 api.post('/logout', async (c) => {
   deleteCookie(c, 'auth_token', { path: '/' })
