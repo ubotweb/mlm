@@ -4,75 +4,59 @@ import { getCookie } from 'hono/cookie'
 
 const checkoutApi = new Hono<{ Bindings: Env; Variables: { jwtPayload: any } }>()
 
-// Pastikan hanya member yang bisa checkout
+// Middleware Verifikasi Sesi
 checkoutApi.use('/', async (c, next) => {
   const token = getCookie(c, 'auth_token')
-  if (!token) return c.json({ error: 'Harap login terlebih dahulu' }, 401)
-  
+  if (!token) return c.redirect('/login')
   try {
     const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
     c.set('jwtPayload', decoded)
     await next()
-  } catch (err) {
-    return c.json({ error: 'Sesi tidak valid' }, 401)
-  }
+  } catch (err) { return c.redirect('/login') }
 })
 
+// Proses Order Baru
 checkoutApi.post('/', async (c) => {
   const db = c.env.DB
   const user = c.get('jwtPayload')
-  
-  try {
-    const body = await c.req.json()
-    const { items, shippingAddress, subtotal, shippingCost, total } = body
 
-    // Ambil user ID
-    const userData = await db.prepare("SELECT id FROM users WHERE username = ?").bind(user.sub).first()
-    if (!userData) return c.json({ error: 'User tidak ditemukan' }, 404)
+  try {
+    // Tangkap data dari Native Form
+    const body = await c.req.parseBody()
+    const itemType = body.item_type as string
+    const itemId = body.item_id as string
+    const subtotal = Number(body.subtotal)
+    const shipping = Number(body.shipping)
+    const amount = Number(body.amount)
+    const paymentMethod = body.payment_method as string
+    const shippingAddress = (body.shipping_address as string) || 'Lisensi Sistem Digital'
+
+    // Dapatkan ID User (Karena JWT hanya menyimpan Username/Sub)
+    const dbUser = await db.prepare("SELECT id FROM users WHERE username = ?").bind(user.sub).first()
+    if (!dbUser) return c.redirect('/login')
 
     const orderId = crypto.randomUUID()
-    const invoiceNumber = `INV-${Date.now()}`
+    const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`
 
-    // Gunakan transaksi Batch D1 untuk memastikan Header Order dan Items tersimpan semua
-    const statements = []
+    // Insert ke tabel orders
+    await db.prepare(`
+      INSERT INTO orders (id, invoice_number, user_id, subtotal, shipping_cost, total_amount, status, payment_method, shipping_address)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    `).bind(
+      orderId, invoiceNumber, dbUser.id, subtotal, shipping, amount, paymentMethod, shippingAddress
+    ).run()
 
-    // 1. Insert Header
-    statements.push(
-      db.prepare(
-        `INSERT INTO orders (id, invoice_number, user_id, subtotal, shipping_cost, total_amount, shipping_address)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).bind(orderId, invoiceNumber, userData.id, subtotal, shippingCost, total, shippingAddress)
-    )
+    // Insert ke tabel order_items
+    const orderItemId = crypto.randomUUID()
+    await db.prepare(`
+      INSERT INTO order_items (id, order_id, product_id, quantity, price_at_time)
+      VALUES (?, ?, ?, 1, ?)
+    `).bind(orderItemId, orderId, itemId, subtotal).run()
 
-    // 2. Insert Items
-    for (const item of items) {
-      statements.push(
-        db.prepare(
-          `INSERT INTO order_items (id, order_id, product_id, quantity, price_at_time)
-           VALUES (?, ?, ?, ?, ?)`
-        ).bind(crypto.randomUUID(), orderId, item.id, item.qty, item.price)
-      )
-    }
-
-    // Eksekusi Batch
-    await db.batch(statements)
-
-    // TODO: Integrasi Payment Gateway (Misal Midtrans Snap API)
-    // const paymentRes = await fetch(c.env.PAYMENT_GATEWAY_URL + '/transactions', { ... })
-    // const paymentData = await paymentRes.json()
-    // const paymentUrl = paymentData.redirect_url
-
-    // Simulasi respons sukses (Bypass Payment Gateway untuk testing)
-    return c.json({ 
-      message: 'Pesanan berhasil dibuat',
-      orderId,
-      invoiceNumber,
-      paymentUrl: null // Ganti dengan URL dari Payment Gateway di production
-    })
-
-  } catch (error) {
-    console.error(error)
-    return c.json({ error: 'Gagal memproses pesanan' }, 500)
+    // Redirect otomatis ke Riwayat Pesanan dengan notifikasi sukses
+    return c.redirect('/member/order?success=Pesanan berhasil dibuat! Silakan lakukan verifikasi pembayaran.')
+  } catch (err) {
+    return c.redirect('/member/order?error=Gagal memproses pesanan, silakan coba lagi.')
   }
 })
 
