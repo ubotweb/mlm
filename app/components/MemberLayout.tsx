@@ -3,53 +3,90 @@ import type { FC } from 'hono/jsx'
 export const MemberLayout: FC<{ profile: any; balance: number; activeMenu: string; children: any }> = ({ profile, balance, activeMenu, children }) => {
   const menus = [
     { name: 'Dashboard', path: '/member', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2z' },
-    { name: 'Referral & Downline', path: '/member/downline', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-    { name: 'Pencairan (Withdraw)', path: '/member/withdraw', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
+    { name: 'Pohon Jaringan', path: '/member/jaringan', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+    { name: 'Referral Saya', path: '/member/downline', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
+    { name: 'Buku Rekening', path: '/member/withdraw', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
+    { name: 'Riwayat Pesanan', path: '/member/order', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
     { name: 'Profil Saya', path: '/member/profil', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
   ]
 
   return (
-    <div class="min-h-screen bg-gray-50 dark:bg-[#0B0E14] text-gray-800 dark:text-gray-200 flex font-sans transition-colors duration-300">
-      {/* SIDEBAR */}
-      <aside class="w-64 bg-white dark:bg-[#151921] border-r border-gray-200 dark:border-[#222731] hidden md:flex flex-col sticky top-0 h-screen">
-        <div class="h-16 flex items-center px-6 border-b border-gray-200 dark:border-[#222731]">
-          <h1 class="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-emerald-500 dark:from-blue-400 dark:to-emerald-400 tracking-wider">
-            HMM<span class="font-light text-gray-800 dark:text-white">BEAUTY</span>
+    <div class="min-h-screen bg-[#0B0E14] text-gray-200 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30">
+      
+      {/* 1. SIDEBAR DESKTOP */}
+      <aside class="w-64 bg-[#151921] border-r border-[#222731] hidden md:flex flex-col sticky top-0 h-screen flex-shrink-0">
+        <div class="h-16 flex items-center px-6 border-b border-[#222731]">
+          <h1 class="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-wider">
+            HMM<span class="font-light text-white">BEAUTY</span>
           </h1>
         </div>
-        <nav class="flex-1 px-4 py-6 space-y-1">
+        <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {menus.map(m => (
-            <a href={m.path} class={`flex items-center px-4 py-3 rounded-lg font-medium transition-colors ${activeMenu === m.name ? 'bg-blue-50 dark:bg-[#1C2333] text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1A1E26]'}`}>
+            <a 
+              href={m.path} 
+              class={`flex items-center px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+                activeMenu === m.name 
+                  ? 'bg-blue-600/10 text-blue-400 border border-blue-500/30' 
+                  : 'text-[#8B949E] hover:text-white hover:bg-[#1A1E26]'
+              }`}
+            >
               <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={m.icon}></path></svg>
               {m.name}
             </a>
           ))}
-          <form method="POST" action="/api/logout" class="mt-8 border-t border-gray-100 dark:border-[#222731] pt-4">
-            <button type="submit" class="w-full flex items-center px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-[#331C1C] rounded-lg transition-colors font-medium">
-              Keluar
+          <form method="POST" action="/api/logout" class="mt-8 border-t border-[#222731] pt-4">
+            <button type="submit" class="w-full flex items-center px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors font-bold text-sm">
+              <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+              Keluar Sesi
             </button>
           </form>
         </nav>
       </aside>
 
-      {/* MAIN CONTENT */}
+      {/* 2. MAIN AREA */}
       <div class="flex-1 flex flex-col min-w-0">
-        <header class="h-16 bg-white dark:bg-[#151921] border-b border-gray-200 dark:border-[#222731] flex items-center justify-between px-6 sticky top-0 z-10">
-          <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">{activeMenu} - HMM</h2>
-          <div class="flex items-center space-x-4">
-            <div class="hidden sm:flex flex-col items-end mr-4">
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium tracking-wider">SALDO AKTIF</span>
-              <span class="text-sm font-bold text-emerald-600 dark:text-[#00E676]">Rp {balance.toLocaleString('id-ID')}</span>
+        
+        {/* TOP NAVBAR (Sertakan Hamburger Menu untuk Mobile) */}
+        <header class="h-16 bg-[#151921] border-b border-[#222731] flex items-center justify-between px-4 md:px-8 sticky top-0 z-40">
+          <div class="flex items-center space-x-3">
+            
+            {/* Mobile Nav Toggle */}
+            <details class="md:hidden relative group">
+              <summary class="list-none cursor-pointer p-2 bg-[#1A1E26] border border-[#2D3342] rounded-lg text-gray-300">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+              </summary>
+              <div class="absolute left-0 mt-3 w-56 bg-[#151921] border border-[#222731] rounded-2xl shadow-2xl p-3 z-50 space-y-1">
+                {menus.map(m => (
+                  <a href={m.path} class="block px-4 py-2.5 rounded-xl text-sm font-bold text-gray-300 hover:bg-[#1A1E26] hover:text-white">
+                    {m.name}
+                  </a>
+                ))}
+                <form method="POST" action="/api/logout" class="pt-2 border-t border-[#222731]">
+                  <button type="submit" class="w-full text-left px-4 py-2 text-sm font-bold text-red-400">Logout</button>
+                </form>
+              </div>
+            </details>
+
+            <h2 class="text-base md:text-xl font-bold text-white tracking-wide">{activeMenu}</h2>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <div class="flex flex-col items-end">
+              <span class="text-[10px] text-[#8B949E] font-bold tracking-wider uppercase">SALDO CAIR</span>
+              <span class="text-xs md:text-sm font-extrabold text-[#00E676]">Rp {balance.toLocaleString('id-ID')}</span>
             </div>
-            <div class="h-10 w-10 bg-emerald-100 dark:bg-[#1B2A24] border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-full flex items-center justify-center font-bold text-lg">
-              {profile.sub.charAt(0).toUpperCase()}
+            <div class="h-9 w-9 bg-[#1B2A24] border border-[#00E676]/30 text-[#00E676] rounded-full flex items-center justify-center font-black text-sm uppercase">
+              {profile.sub.charAt(0)}
             </div>
           </div>
         </header>
-        <main class="flex-1 p-6 md:p-8 overflow-y-auto">
+
+        {/* CONTENT BODY */}
+        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
           {children}
         </main>
       </div>
+
     </div>
   )
 }
