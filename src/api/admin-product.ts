@@ -4,43 +4,42 @@ import { getCookie } from 'hono/cookie'
 
 const adminProductApi = new Hono<{ Bindings: Env }>()
 
-// 1. MIDDLEWARE AUTENTIKASI AMAN
-adminProductApi.use('/*', async (c, next) => {
+// 1. MIDDLEWARE AMAN: Menggunakan "return next()" agar rantai Promise tidak terputus
+adminProductApi.use('*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
   
-  const decoded = await verify(token, c.env.JWT_SECRET, 'HS256').catch(() => null)
-  if (!decoded || decoded.role !== 'admin') {
-    return c.redirect('/member')
+  try {
+    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
+    if (decoded.role !== 'admin') return c.redirect('/member')
+  } catch (err) {
+    return c.redirect('/login')
   }
   
-  await next()
+  return next() 
 })
 
-// 2. FUNGSI UPLOAD CLOUDINARY (Konversi File -> Blob Native)
+// 2. FUNGSI UPLOAD CLOUDINARY (Menggunakan objek File bawaan langsung)
 async function uploadToCloudinary(file: File, env: Env): Promise<string> {
   const cloudName = env.CLOUDINARY_CLOUD_NAME
   const apiKey = env.CLOUDINARY_API_KEY
   const apiSecret = env.CLOUDINARY_API_SECRET
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Kredensial API Cloudinary belum disetting di Environment Variables.")
+    throw new Error("Kredensial API Cloudinary belum diatur di sistem!")
   }
 
-  // Buat Signature SHA-1 (Web Crypto API)
+  // Generate Signature Keamanan Cloudinary (Web Crypto API)
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const strToSign = `timestamp=${timestamp}${apiSecret}`
+  
   const encoder = new TextEncoder()
   const data = encoder.encode(strToSign)
   const hashBuffer = await crypto.subtle.digest('SHA-1', data)
   const signature = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 
-  // PERBAIKAN FATAL: Ekstrak File Hono menjadi Blob Native Cloudflare
-  const fileBuffer = await file.arrayBuffer()
-  const nativeBlob = new Blob([fileBuffer], { type: file.type })
-
   const formData = new FormData()
-  formData.append('file', nativeBlob, file.name || 'upload.jpg')
+  formData.append('file', file)
   formData.append('api_key', apiKey)
   formData.append('timestamp', timestamp)
   formData.append('signature', signature)
@@ -50,45 +49,51 @@ async function uploadToCloudinary(file: File, env: Env): Promise<string> {
     body: formData
   })
 
-  const result: any = await res.json()
   if (!res.ok) {
-    throw new Error(result.error?.message || "Gagal mengunggah gambar ke server Cloudinary")
+    const result: any = await res.json().catch(() => ({}))
+    throw new Error(result.error?.message || "Gagal mengunggah gambar ke Cloudinary")
   }
+  
+  const result: any = await res.json()
   return result.secure_url
 }
 
-// 3. ROUTE CREATE PRODUK (Diganti menjadi /upload agar URL tidak ambigu)
+// 3. ROUTE CREATE PRODUK
 adminProductApi.post('/upload', async (c) => {
   try {
     const db = c.env.DB
-    const body = await c.req.parseBody({ all: true })
+    const body = await c.req.parseBody() // Tanpa {all: true} mencegah memory leak array
     const fileData = body['image']
     let imageUrl = ''
     
-    // Validasi Keberadaan Gambar
-    if (fileData && typeof fileData !== 'string') {
-      const f = Array.isArray(fileData) ? fileData[0] : fileData
-      if (f instanceof File && f.size > 0) {
-        imageUrl = await uploadToCloudinary(f, c.env)
-      }
+    // Validasi file yang ketat
+    if (fileData && typeof fileData !== 'string' && fileData instanceof File && fileData.size > 0) {
+      imageUrl = await uploadToCloudinary(fileData, c.env)
     }
 
     const id = crypto.randomUUID()
-    const slug = (body.name as string).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4)
+    const slug = String(body.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4)
+    
+    // Konversi statis untuk mencegah D1 Database Crash karena nilai NaN / Undefined
+    const price = Number(body.price) || 0
+    const memberPrice = Number(body.member_price) || 0
+    const stock = Number(body.stock) || 0
+    const isActive = body.is_active ? 1 : 0
 
     await db.prepare(`
       INSERT INTO products (id, category, name, slug, description, price, member_price, stock, bpom_number, halal_number, image_url, is_active)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      id, body.category as string, body.name as string, slug, body.description as string,
-      Number(body.price), Number(body.member_price), Number(body.stock),
-      body.bpom_number as string, body.halal_number as string, imageUrl,
-      body.is_active ? 1 : 0
+      id, String(body.category), String(body.name), slug, String(body.description || ''),
+      price, memberPrice, stock,
+      String(body.bpom_number || ''), String(body.halal_number || ''), imageUrl, isActive
     ).run()
 
     return c.redirect('/admin/produk?success=Produk+baru+berhasil+ditambahkan')
   } catch (err: any) {
-    return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
+    console.error("UPLOAD ERROR:", err)
+    // Teks statis mematikan potensi crash dari karakter ilegal di err.message
+    return c.redirect('/admin/produk?error=Gagal+menyimpan+produk.+Pastikan+isian+valid.')
   }
 })
 
@@ -96,9 +101,14 @@ adminProductApi.post('/upload', async (c) => {
 adminProductApi.post('/update', async (c) => {
   try {
     const db = c.env.DB
-    const body = await c.req.parseBody({ all: true })
-    const id = body.id as string
+    const body = await c.req.parseBody()
+    const id = String(body.id)
     const fileData = body['image']
+    
+    const price = Number(body.price) || 0
+    const memberPrice = Number(body.member_price) || 0
+    const stock = Number(body.stock) || 0
+    const isActive = body.is_active ? 1 : 0
     
     let updateQuery = `
       UPDATE products SET 
@@ -106,28 +116,26 @@ adminProductApi.post('/update', async (c) => {
       stock = ?, bpom_number = ?, halal_number = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
     `
     const params: any[] = [
-      body.category as string, body.name as string, body.description as string,
-      Number(body.price), Number(body.member_price), Number(body.stock),
-      body.bpom_number as string, body.halal_number as string, body.is_active ? 1 : 0
+      String(body.category), String(body.name), String(body.description || ''),
+      price, memberPrice, stock,
+      String(body.bpom_number || ''), String(body.halal_number || ''), isActive
     ]
 
     // Proses unggah gambar baru jika Admin memilih file
-    if (fileData && typeof fileData !== 'string') {
-      const f = Array.isArray(fileData) ? fileData[0] : fileData
-      if (f instanceof File && f.size > 0) {
-         const imageUrl = await uploadToCloudinary(f, c.env)
-         updateQuery += `, image_url = ?`
-         params.push(imageUrl)
-      }
+    if (fileData && typeof fileData !== 'string' && fileData instanceof File && fileData.size > 0) {
+       const imageUrl = await uploadToCloudinary(fileData, c.env)
+       updateQuery += `, image_url = ?`
+       params.push(imageUrl)
     }
 
     updateQuery += ` WHERE id = ?`
     params.push(id)
 
     await db.prepare(updateQuery).bind(...params).run()
-    return c.redirect('/admin/produk?success=Data+produk+berhasil+diperbarui')
+    return c.redirect('/admin/produk?success=Informasi+produk+berhasil+diperbarui')
   } catch (err: any) {
-    return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
+    console.error("UPDATE ERROR:", err)
+    return c.redirect('/admin/produk?error=Gagal+memperbarui+produk')
   }
 })
 
@@ -136,10 +144,11 @@ adminProductApi.post('/delete', async (c) => {
   try {
     const db = c.env.DB
     const body = await c.req.parseBody()
-    await db.prepare("DELETE FROM products WHERE id = ?").bind(body.id as string).run()
+    await db.prepare("DELETE FROM products WHERE id = ?").bind(String(body.id)).run()
     return c.redirect('/admin/produk?success=Produk+berhasil+dihapus')
   } catch (err: any) {
-    return c.redirect(`/admin/produk?error=${encodeURIComponent(err.message)}`)
+    console.error("DELETE ERROR:", err)
+    return c.redirect('/admin/produk?error=Gagal+menghapus+produk')
   }
 })
 
