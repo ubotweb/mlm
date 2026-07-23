@@ -54,11 +54,12 @@ memberPinApi.post('/buy', async (c) => {
 
     if (!serverKey) throw new Error("Kunci API Midtrans belum diatur oleh Administrator.")
 
-    // === GENERATE WEBHOOK URL OTOMATIS BERDASARKAN DOMAIN SAAT INI ===
+    // === GENERATE WEBHOOK & REDIRECT URL OTOMATIS BERDASARKAN DOMAIN SAAT INI ===
     const requestUrl = new URL(c.req.url)
-    const webhookUrl = `${requestUrl.protocol}//${requestUrl.host}/api/webhook/payment-callback`
+    const baseUrl = `${requestUrl.protocol}//${requestUrl.host}`
+    const webhookUrl = `${baseUrl}/api/webhook/payment-callback`
 
-    // Panggil Midtrans Snap API dengan tambahan Header X-Override-Notification
+    // Panggil Midtrans Snap API dengan tambahan Header X-Override-Notification dan Callbacks
     const authString = btoa(`${serverKey}:`)
     const response = await fetch(midtransUrl, {
       method: 'POST',
@@ -66,7 +67,7 @@ memberPinApi.post('/buy', async (c) => {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'Authorization': `Basic ${authString}`,
-        'X-Override-Notification': webhookUrl // <-- MIDTRANS AKAN OTOMATIS MENEMBAK KE SINI
+        'X-Override-Notification': webhookUrl // <-- MIDTRANS AKAN OTOMATIS MENEMBAK WEBHOOK KE SINI
       },
       body: JSON.stringify({
         transaction_details: {
@@ -77,6 +78,11 @@ memberPinApi.post('/buy', async (c) => {
           first_name: user.full_name,
           email: user.email || 'noemail@hmmbeauty.com',
           phone: user.phone || '08000000000'
+        },
+        callbacks: {
+          finish: `${baseUrl}/member/pin?success=Pembayaran+sedang+diproses.+Silakan+tunggu+beberapa+saat+hingga+PIN+muncul.`,
+          unfinish: `${baseUrl}/member/pin?error=Pembayaran+belum+selesai+atau+dibatalkan.`,
+          error: `${baseUrl}/member/pin?error=Pembayaran+gagal+dilakukan.`
         }
       })
     })
