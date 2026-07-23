@@ -33,9 +33,10 @@ memberPinApi.post('/buy', async (c) => {
     const invoiceNumber = `INV-PIN-${Date.now()}`
     const amount = Number(pkg.registration_fee)
 
+    // PERBAIKAN: Menyuntikkan placeholder untuk shipping_address agar lolos validasi NOT NULL database
     await db.prepare(`
-      INSERT INTO orders (id, invoice_number, user_id, subtotal, shipping_cost, total_amount, status, payment_method) 
-      VALUES (?, ?, ?, ?, 0, ?, 'pending', 'Midtrans')
+      INSERT INTO orders (id, invoice_number, user_id, subtotal, shipping_cost, total_amount, status, payment_method, shipping_address) 
+      VALUES (?, ?, ?, ?, 0, ?, 'pending', 'Midtrans', 'Digital PIN (Produk belum diklaim)')
     `).bind(orderId, invoiceNumber, user.id, amount, amount).run()
 
     await db.prepare(`
