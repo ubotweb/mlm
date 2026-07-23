@@ -4,7 +4,7 @@ import { getCookie } from 'hono/cookie'
 
 const adminSettingsApi = new Hono<{ Bindings: Env }>()
 
-adminSettingsApi.use('/*', async (c, next) => {
+adminSettingsApi.use('*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
   try {
@@ -14,18 +14,20 @@ adminSettingsApi.use('/*', async (c, next) => {
   } catch { return c.redirect('/login') }
 })
 
-// Update Parameter Bonus MLM & Midtrans
 adminSettingsApi.post('/', async (c) => {
   const db = c.env.DB
   try {
     const body = await c.req.parseBody()
     
+    // Looping semua input dan update/insert (Upsert) ke database
     for (const [key, value] of Object.entries(body)) {
-      await db.prepare(`
-        INSERT INTO site_settings (key, value, updated_at) 
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-      `).bind(key, String(value)).run()
+      if (value !== undefined && value !== null) {
+        await db.prepare(`
+          INSERT INTO site_settings (key, value, updated_at) 
+          VALUES (?, ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+        `).bind(key, String(value)).run()
+      }
     }
     
     return c.redirect('/admin/pengaturan?success=Pengaturan+bonus+dan+sistem+berhasil+disimpan')
