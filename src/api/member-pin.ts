@@ -14,7 +14,7 @@ memberPinApi.use('*', async (c, next) => {
   await next()
 })
 
-// MESIN 1: GENERATE PIN & CAIRKAN BONUS SPONSOR
+// MESIN 1: BUAT ORDER PEMBELIAN PAKET (GENERATE INVOICE & SNAP MIDTRANS)
 memberPinApi.post('/buy', async (c) => {
   const db = c.env.DB
   const payload = c.get('jwtPayload')
@@ -25,35 +25,64 @@ memberPinApi.post('/buy', async (c) => {
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
     if (!pkg) throw new Error("Paket tidak ditemukan")
 
-    const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
+    const user = await db.prepare("SELECT id, hu_id, full_name, email, phone FROM users WHERE hu_id = ?").bind(payload.sub).first()
     if (!user) throw new Error("Akses HU Ditolak")
 
-    const huCount = Number(pkg.hu_count) || 1
-    const sponsorBonus = Number(pkg.sponsor_bonus_amount) || 0
+    // Buat Invoice Order
+    const orderId = crypto.randomUUID()
+    const invoiceNumber = `INV-PIN-${Date.now()}`
+    const amount = Number(pkg.registration_fee)
+
+    await db.prepare(`
+      INSERT INTO orders (id, invoice_number, user_id, subtotal, shipping_cost, total_amount, status, payment_method) 
+      VALUES (?, ?, ?, ?, 0, ?, 'pending', 'Midtrans')
+    `).bind(orderId, invoiceNumber, user.id, amount, amount).run()
+
+    await db.prepare(`
+      INSERT INTO order_items (id, order_id, package_id, quantity, price_at_time) 
+      VALUES (?, ?, ?, 1, ?)
+    `).bind(crypto.randomUUID(), orderId, pkg.id, amount).run()
+
+    // Ambil Kunci Midtrans dari Pengaturan
+    const { results: settingsData } = await db.prepare("SELECT key, value FROM site_settings WHERE key IN ('midtrans_server_key', 'midtrans_is_production')").all()
+    const settings = settingsData.reduce((acc: any, curr: any) => { acc[curr.key] = curr.value; return acc; }, {})
     
-    // Generate PIN Acak per HU dalam paket
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-    for (let i = 0; i < huCount; i++) {
-      let pinCode = `HMM-${pkg.name.toString().substring(0,3).toUpperCase()}-`
-      for(let j=0; j<8; j++) pinCode += chars.charAt(Math.floor(Math.random() * chars.length))
-      
-      const pinId = crypto.randomUUID()
-      await db.prepare(`
-        INSERT INTO activation_pins (id, pin_code, package_id, purchaser_hu_id, is_used) 
-        VALUES (?, ?, ?, ?, 0)
-      `).bind(pinId, pinCode, pkg.id, user.hu_id).run()
+    const serverKey = settings.midtrans_server_key || ''
+    const isProd = settings.midtrans_is_production === '1'
+    const midtransUrl = isProd ? 'https://app.midtrans.com/snap/v1/transactions' : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+
+    if (!serverKey) throw new Error("Kunci API Midtrans belum diatur oleh Administrator.")
+
+    // Panggil Midtrans Snap API
+    const authString = btoa(`${serverKey}:`)
+    const response = await fetch(midtransUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${authString}`
+      },
+      body: JSON.stringify({
+        transaction_details: {
+          order_id: invoiceNumber,
+          gross_amount: amount
+        },
+        customer_details: {
+          first_name: user.full_name,
+          email: user.email || 'noemail@hmmbeauty.com',
+          phone: user.phone || '08000000000'
+        }
+      })
+    })
+
+    const snap = await response.json()
+    
+    if (snap.redirect_url) {
+      return c.redirect(snap.redirect_url)
+    } else {
+      throw new Error("Gagal mendapatkan token pembayaran dari Midtrans. Periksa konfigurasi API Key.")
     }
 
-    // Cairkan Bonus Sponsor Langsung ke Pembeli PIN
-    const commId = crypto.randomUUID()
-    await db.prepare(`
-      INSERT INTO commissions (id, user_id, type, amount, description, status)
-      VALUES (?, ?, 'sponsor', ?, ?, 'released')
-    `).bind(commId, user.id, sponsorBonus, `Bonus Sponsor Pembelian Paket ${pkg.name}`).run()
-
-    await db.prepare(`UPDATE users SET balance = balance + ? WHERE id = ?`).bind(sponsorBonus, user.id).run()
-
-    return c.redirect('/member/pin?success=Pembelian+Berhasil!+PIN+Tercetak+dan+Bonus+Sponsor+Telah+Masuk.')
   } catch (err: any) {
     return c.redirect(`/member/pin?error=${encodeURIComponent(err.message)}`)
   }
@@ -69,7 +98,7 @@ memberPinApi.post('/activate', async (c) => {
   const newName = String(formData.get('new_full_name'))
   const newPassword = String(formData.get('new_password'))
   const targetUplineHu = String(formData.get('upline_hu_id')).trim()
-  const position = String(formData.get('position')) // 'left' atau 'right'
+  const position = String(formData.get('position'))
 
   try {
     const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
@@ -105,7 +134,7 @@ memberPinApi.post('/activate', async (c) => {
     const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(newPassword))
     const hashedPassword = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 
-    // 6. Eksekusi Aktivasi
+    // 6. Eksekusi Aktivasi Otomatis Mengunci Level/Paket
     await db.prepare(`
       INSERT INTO users (id, hu_id, password_hash, role, full_name, package_id, sponsor_id, upline_id, network_position)
       VALUES (?, ?, ?, 'member', ?, ?, ?, ?, ?)
