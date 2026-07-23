@@ -4,39 +4,53 @@ import { getCookie } from 'hono/cookie'
 
 const adminProductApi = new Hono<{ Bindings: Env }>()
 
-// [FUNGSI NATIVE CLOUDINARY UPLOAD]
-// Menggunakan Web Crypto murni & FormData C++ Native Cloudflare
+// FUNGSI HELPER: Konversi File ke Base64 
+// (Ini adalah Kunci Utama pencegah V8 Engine Crash di Cloudflare!)
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// FUNGSI UPLOAD CLOUDINARY (Anti-Crash)
 async function uploadToCloudinary(file: File, env: Env): Promise<string> {
   const cloudName = env.CLOUDINARY_CLOUD_NAME
   const apiKey = env.CLOUDINARY_API_KEY
   const apiSecret = env.CLOUDINARY_API_SECRET
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Kredensial Cloudinary (CLOUD_NAME, API_KEY, API_SECRET) tidak ditemukan di Environment Variables!")
+    throw new Error("Kredensial API Cloudinary tidak ditemukan di pengaturan Environment Variables!")
   }
 
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const strToSign = `timestamp=${timestamp}${apiSecret}`
-  
   const encoder = new TextEncoder()
   const data = encoder.encode(strToSign)
   const hashBuffer = await crypto.subtle.digest('SHA-1', data)
   const signature = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 
-  const cloudinaryFormData = new FormData()
-  cloudinaryFormData.append('file', file) // Langsung teruskan Native File Object
-  cloudinaryFormData.append('api_key', apiKey)
-  cloudinaryFormData.append('timestamp', timestamp)
-  cloudinaryFormData.append('signature', signature)
+  // Ektraksi File menjadi teks Base64 untuk menghindari Panic Stream
+  const buffer = await file.arrayBuffer()
+  const base64 = arrayBufferToBase64(buffer)
+  const dataUri = `data:${file.type || 'image/jpeg'};base64,${base64}`
+
+  const fd = new FormData()
+  fd.append('file', dataUri) // Dikirim sebagai TEKS, Cloudflare aman 100%
+  fd.append('api_key', apiKey)
+  fd.append('timestamp', timestamp)
+  fd.append('signature', signature)
 
   const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
     method: 'POST',
-    body: cloudinaryFormData
+    body: fd
   })
 
   if (!res.ok) {
     const errText = await res.text()
-    throw new Error(`Gagal Upload ke Cloudinary: ${errText}`)
+    throw new Error(`Upload Cloudinary Gagal: ${errText}`)
   }
   
   const result: any = await res.json()
@@ -45,7 +59,7 @@ async function uploadToCloudinary(file: File, env: Env): Promise<string> {
 
 // 1. ROUTE CREATE PRODUK BARU
 adminProductApi.post('/upload', async (c) => {
-  // Pengecekan Autentikasi Manual (Mencegah Hono Middleware Crash)
+  // Pengecekan Autentikasi Manual
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
   try {
@@ -55,9 +69,7 @@ adminProductApi.post('/upload', async (c) => {
 
   try {
     const db = c.env.DB
-    
-    // PERBAIKAN FATAL: Menggunakan Native CF Workers FormData (Bukan Hono parseBody)
-    const formData = await c.req.formData()
+    const formData = await c.req.formData() // Gunakan Native CF Form Data
     
     const fileData = formData.get('image')
     let imageUrl = ''
@@ -86,8 +98,8 @@ adminProductApi.post('/upload', async (c) => {
 
     return c.redirect('/admin/produk?success=Produk+baru+berhasil+ditambahkan')
   } catch (err: any) {
-    // Memaksa pengembalian Response Native Web API agar Cloudflare tidak memutus koneksi
-    return new Response(`[SYSTEM DEBUG] Terjadi kegagalan saat Upload: ${err.message}`, { status: 500 })
+    // DEBUG RESPONS JIKA GAGAL
+    return new Response(`[CRITICAL DEBUG] Gagal Upload: ${err.message}`, { status: 500 })
   }
 })
 
@@ -102,7 +114,7 @@ adminProductApi.post('/update', async (c) => {
 
   try {
     const db = c.env.DB
-    const formData = await c.req.formData() // NATIVE WEB API
+    const formData = await c.req.formData() 
     
     const id = String(formData.get('id'))
     const fileData = formData.get('image')
@@ -135,7 +147,7 @@ adminProductApi.post('/update', async (c) => {
     await db.prepare(updateQuery).bind(...params).run()
     return c.redirect('/admin/produk?success=Informasi+produk+berhasil+diperbarui')
   } catch (err: any) {
-    return new Response(`[SYSTEM DEBUG] Terjadi kegagalan saat Update: ${err.message}`, { status: 500 })
+    return new Response(`[CRITICAL DEBUG] Gagal Update: ${err.message}`, { status: 500 })
   }
 })
 
@@ -150,12 +162,12 @@ adminProductApi.post('/delete', async (c) => {
 
   try {
     const db = c.env.DB
-    const formData = await c.req.formData() // NATIVE WEB API
+    const formData = await c.req.formData() 
     await db.prepare("DELETE FROM products WHERE id = ?").bind(String(formData.get('id'))).run()
     
     return c.redirect('/admin/produk?success=Produk+berhasil+dihapus+permanen')
   } catch (err: any) {
-    return new Response(`[SYSTEM DEBUG] Terjadi kegagalan saat Delete: ${err.message}`, { status: 500 })
+    return new Response(`[CRITICAL DEBUG] Gagal Delete: ${err.message}`, { status: 500 })
   }
 })
 
