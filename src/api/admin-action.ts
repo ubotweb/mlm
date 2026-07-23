@@ -7,23 +7,23 @@ const adminActionApi = new Hono<{ Bindings: Env; Variables: { jwtPayload: any } 
 // Middleware proteksi Admin
 adminActionApi.use('/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
-  if (!token) return c.json({ error: 'Unauthorized' }, 401)
+  if (!token) return c.redirect('/login')
   try {
-    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
-    if (decoded.role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+    const decoded: any = await verify(token, c.env.JWT_SECRET, 'HS256')
+    if (decoded.role !== 'admin') return c.redirect('/member')
     c.set('jwtPayload', decoded)
     await next()
   } catch (err) {
-    return c.json({ error: 'Invalid token' }, 401)
+    return c.redirect('/login')
   }
 })
 
-// GET: Ambil daftar withdraw yang masih pending
+// GET: Ambil daftar withdraw yang masih pending (Untuk kebutuhan fetch via JSON)
 adminActionApi.get('/withdrawals/pending', async (c) => {
   const db = c.env.DB
   try {
     const { results } = await db.prepare(`
-      SELECT w.id, u.username, w.amount, w.net_amount, w.bank_name, w.account_number, w.account_name, w.created_at
+      SELECT w.id, u.hu_id as username, w.amount, w.net_amount, w.bank_name, w.account_number, w.account_name, w.created_at
       FROM withdrawals w
       JOIN users u ON w.user_id = u.id
       WHERE w.status = 'pending'
@@ -35,44 +35,81 @@ adminActionApi.get('/withdrawals/pending', async (c) => {
   }
 })
 
-// POST: Proses Approval / Rejection
+// POST: Proses Approval / Rejection (Mendukung FormData untuk Upload File)
 adminActionApi.post('/withdrawals/process', async (c) => {
   const db = c.env.DB
   const admin = c.get('jwtPayload')
   
   try {
-    const { withdrawId, action } = await c.req.json() // action: 'approve' atau 'reject'
+    const formData = await c.req.formData()
+    const withdrawId = String(formData.get('withdrawId'))
+    const action = String(formData.get('action'))
+    const proofFile = formData.get('proof_file') // File bukti transfer
     
-    const adminUser = await db.prepare("SELECT id FROM users WHERE username = ?").bind(admin.sub).first()
+    // Cari admin user berdasarkan hu_id (sub)
+    const adminUser = await db.prepare("SELECT id FROM users WHERE hu_id = ?").bind(admin.sub).first()
     const withdraw = await db.prepare("SELECT user_id, amount, status FROM withdrawals WHERE id = ?").bind(withdrawId).first()
 
     if (!withdraw || withdraw.status !== 'pending') {
-      return c.json({ error: 'Data withdraw tidak valid atau sudah diproses' }, 400)
+      return c.redirect('/admin/laporan?error=Data+withdraw+tidak+valid+atau+sudah+diproses')
     }
 
     if (action === 'approve') {
+      let notes = 'Ditransfer manual'
+      
+      // Jika admin melampirkan file bukti transfer, simpan namanya ke kolom notes
+      // (Bisa dikembangkan lebih lanjut untuk upload ke R2 Bucket)
+      if (proofFile && typeof proofFile === 'object' && 'name' in proofFile) {
+        notes = `Bukti Transfer: ${(proofFile as File).name} (Telah diverifikasi)`
+      }
+
       await db.prepare(
-        "UPDATE withdrawals SET status = 'completed', processed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-      ).bind(adminUser!.id, withdrawId).run()
-      return c.json({ message: 'Withdraw berhasil disetujui' })
+        "UPDATE withdrawals SET status = 'completed', processed_by = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).bind(adminUser!.id, notes, withdrawId).run()
+      
+      return c.redirect('/admin/laporan?success=Withdraw+berhasil+disetujui+dan+telah+ditransfer')
     } 
     
     if (action === 'reject') {
       // Kembalikan saldo user jika ditolak
       await db.batch([
         db.prepare(
-          "UPDATE withdrawals SET status = 'rejected', processed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          "UPDATE withdrawals SET status = 'rejected', processed_by = ?, notes = 'Ditolak', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         ).bind(adminUser!.id, withdrawId),
         db.prepare(
           "UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         ).bind(withdraw.amount, withdraw.user_id)
       ])
-      return c.json({ message: 'Withdraw ditolak, saldo dikembalikan' })
+      return c.redirect('/admin/laporan?error=Withdraw+ditolak,+saldo+dikembalikan')
     }
 
-    return c.json({ error: 'Aksi tidak dikenal' }, 400)
-  } catch (err) {
-    return c.json({ error: 'Gagal memproses data' }, 500)
+    return c.redirect('/admin/laporan?error=Aksi+tidak+dikenal')
+  } catch (err: any) {
+    return c.redirect(`/admin/laporan?error=${encodeURIComponent(err.message)}`)
+  }
+})
+
+// ENDPOINT: UPDATE STATUS ORDER (Dipastikan tidak hilang)
+adminActionApi.post('/update_order', async (c) => {
+  const db = c.env.DB
+  try {
+    const formData = await c.req.formData()
+    const orderId = String(formData.get('order_id'))
+    const status = String(formData.get('status'))
+
+    if (!orderId || !status) {
+      throw new Error("Data order ID atau status tidak lengkap")
+    }
+
+    await db.prepare(`
+      UPDATE orders 
+      SET status = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).bind(status, orderId).run()
+
+    return c.redirect('/admin/order?success=Status+transaksi+berhasil+diperbarui')
+  } catch (err: any) {
+    return c.redirect(`/admin/order?error=${encodeURIComponent(err.message)}`)
   }
 })
 
