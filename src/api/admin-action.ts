@@ -44,7 +44,7 @@ adminActionApi.post('/withdrawals/process', async (c) => {
     const formData = await c.req.formData()
     const withdrawId = String(formData.get('withdrawId'))
     const action = String(formData.get('action'))
-    const proofFile = formData.get('proof_file') // File bukti transfer
+    const proofFile = formData.get('proof_file') 
     
     // Cari admin user berdasarkan hu_id (sub)
     const adminUser = await db.prepare("SELECT id FROM users WHERE hu_id = ?").bind(admin.sub).first()
@@ -55,17 +55,18 @@ adminActionApi.post('/withdrawals/process', async (c) => {
     }
 
     if (action === 'approve') {
-      let notes = 'Ditransfer manual'
+      let proofUrl = ''
       
-      // Jika admin melampirkan file bukti transfer, simpan namanya ke kolom notes
-      // (Bisa dikembangkan lebih lanjut untuk upload ke R2 Bucket)
+      // Proses file bukti transfer
       if (proofFile && typeof proofFile === 'object' && 'name' in proofFile) {
-        notes = `Bukti Transfer: ${(proofFile as File).name} (Telah diverifikasi)`
+        // [OPSIONAL] Di level production, Anda akan mengunggah file ini ke Cloudflare R2 / AWS S3.
+        // Untuk tahap ini, kita menyimulasikan URL dengan menyimpan nama filenya ke kolom url_bukti_transfer
+        proofUrl = `/uploads/${(proofFile as File).name}` 
       }
 
       await db.prepare(
-        "UPDATE withdrawals SET status = 'completed', processed_by = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-      ).bind(adminUser!.id, notes, withdrawId).run()
+        "UPDATE withdrawals SET status = 'completed', processed_by = ?, url_bukti_transfer = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).bind(adminUser!.id, proofUrl, withdrawId).run()
       
       return c.redirect('/admin/laporan?success=Withdraw+berhasil+disetujui+dan+telah+ditransfer')
     } 
@@ -89,7 +90,7 @@ adminActionApi.post('/withdrawals/process', async (c) => {
   }
 })
 
-// ENDPOINT: UPDATE STATUS ORDER (Dipastikan tidak hilang)
+// ENDPOINT: UPDATE STATUS ORDER 
 adminActionApi.post('/update_order', async (c) => {
   const db = c.env.DB
   try {
