@@ -59,6 +59,14 @@ export const MemberLayout: FC<{ profile: any; balance: number; activeMenu: strin
                 {menus.map(m => (
                   <a href={m.path} class="block px-4 py-2.5 rounded-xl text-sm font-bold text-gray-300 hover:bg-[#1A1E26] hover:text-white">{m.name}</a>
                 ))}
+                
+                {/* PENAMBAHAN TOMBOL LOGOUT UNTUK MOBILE */}
+                <form method="POST" action="/api/logout" class="mt-2 border-t border-[#222731] pt-2">
+                  <button type="submit" class="w-full text-left px-4 py-2.5 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition-colors">
+                    Keluar Sesi
+                  </button>
+                </form>
+
               </div>
             </details>
             <h2 class="text-base md:text-xl font-bold text-white tracking-wide">{activeMenu}</h2>
