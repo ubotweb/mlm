@@ -57,17 +57,65 @@ export default createRoute(async (c) => {
                   <p class="text-[10px] text-yellow-500 font-bold mt-1">Stok: {p.stock} Pcs</p>
                 </div>
                 
-                <form action="/api/checkout/ro" method="POST" onsubmit="return confirm('Proses pembelian Repeat Order? Anda akan diarahkan ke Midtrans.');">
-                  <input type="hidden" name="product_id" value={p.id} />
-                  <button type="submit" class="w-full bg-[#1A1E26] hover:bg-emerald-500 text-gray-300 hover:text-[#0B0E14] border border-[#2D3342] hover:border-emerald-500 font-black py-3 rounded-xl transition-colors text-xs uppercase tracking-widest">
-                    Beli Produk
-                  </button>
-                </form>
+                {/* Tombol dimodifikasi untuk membuka Modal HTML5, bukan alert bawaan browser */}
+                <button 
+                  type="button" 
+                  onclick={`openCheckoutModal('${p.id}', '${p.name.replace(/'/g, "\\'")}', ${p.member_price})`}
+                  class="w-full bg-[#1A1E26] hover:bg-emerald-500 text-gray-300 hover:text-[#0B0E14] border border-[#2D3342] hover:border-emerald-500 font-black py-3 rounded-xl transition-colors text-xs uppercase tracking-widest cursor-pointer"
+                >
+                  Beli Produk
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* MODAL KONFIRMASI CHECKOUT MODERN */}
+      <dialog id="checkoutModal" class="bg-transparent m-auto p-0 w-[95vw] max-w-md backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
+        <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative text-left">
+          <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731] flex justify-between items-center">
+            <h4 class="font-black text-white text-sm uppercase tracking-widest text-emerald-400">Konfirmasi Repeat Order</h4>
+            <button onclick="document.getElementById('checkoutModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
+          </div>
+          <div class="p-6">
+            
+            <div class="bg-blue-500/10 border border-blue-500/30 text-blue-400 p-4 rounded-xl mb-6 text-xs md:text-sm font-bold text-center leading-relaxed">
+              Proses pembelian Repeat Order? Anda akan diarahkan ke <span class="text-white">Pembayaran Midtrans</span>.
+            </div>
+            
+            <div class="bg-[#0B0E14] border border-[#222731] p-5 rounded-xl mb-6 space-y-3 text-sm">
+              <p class="text-[#8B949E] flex justify-between items-center">
+                Produk: 
+                <span id="modal-product-name" class="font-bold text-white text-right max-w-[60%] line-clamp-2 leading-tight"></span>
+              </p>
+              <div class="border-t border-[#222731] my-2 pt-2"></div>
+              <p class="text-[#8B949E] flex justify-between items-end">
+                Total Bayar: 
+                <span id="modal-product-price" class="font-black text-emerald-400 text-xl"></span>
+              </p>
+            </div>
+
+            <form action="/api/checkout/ro" method="POST" class="space-y-4">
+              <input type="hidden" name="product_id" id="modal-product-id" value="" />
+              <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[#0B0E14] font-black py-4 rounded-xl mt-4 transition-colors shadow-lg shadow-emerald-600/20 uppercase tracking-widest text-xs cursor-pointer">
+                Lanjutkan Pembayaran
+              </button>
+            </form>
+          </div>
+        </div>
+      </dialog>
+
+      {/* SCRIPT INJEKSI UNTUK MENANGANI DATA MODAL */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        function openCheckoutModal(id, name, price) {
+          document.getElementById('modal-product-id').value = id;
+          document.getElementById('modal-product-name').innerText = name;
+          document.getElementById('modal-product-price').innerText = 'Rp ' + price.toLocaleString('id-ID');
+          document.getElementById('checkoutModal').showModal();
+        }
+      `}} />
+
     </MemberLayout>
   )
 })
