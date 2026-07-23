@@ -140,6 +140,36 @@ export default createRoute(async (c) => {
             </div>
           </div>
 
+          {/* Card 6: FITUR LINK REFERRAL BARU (Hanya terbuka jika nomor HP sudah diisi) */}
+          <div class="bg-[#151921] border border-[#222731] rounded-xl overflow-hidden shadow-sm">
+            <div class="px-6 py-5 flex items-center border-b border-[#222731]">
+              <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-full mr-4">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">Link Referral Perekrutan</h4>
+                <p class="text-[11px] text-[#8B949E] mt-1">Sebarkan link ini agar prospek baru otomatis terhubung ke WhatsApp Anda.</p>
+              </div>
+            </div>
+            <div class="p-6">
+              {user?.phone ? (
+                <div>
+                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Tautan Khusus Anda</label>
+                  <div class="flex items-center space-x-3">
+                    <input type="text" id="refLink" readOnly value={`https://hmmbeauty.pages.dev/?ref=${profile.sub.toUpperCase()}`} class="flex-1 bg-[#0B0E14] border border-[#2D3342] text-emerald-400 font-bold rounded-lg px-4 py-3 focus:outline-none text-sm" />
+                    <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('refLink').value); alert('Tautan berhasil disalin!')" class="bg-emerald-600 hover:bg-emerald-500 text-[#0B0E14] font-black px-6 py-3 rounded-lg transition-colors text-sm shadow-lg shadow-emerald-500/20 uppercase tracking-widest cursor-pointer">
+                      Salin Link
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div class="bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 p-4 rounded-lg text-sm font-bold text-center leading-relaxed">
+                  Silakan isi dan simpan Nomor Whatsapp Anda pada menu Informasi Kontak (KYC) di atas terlebih dahulu untuk bisa membuat Link Referral.
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
     </MemberLayout>
