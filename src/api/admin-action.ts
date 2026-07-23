@@ -35,7 +35,7 @@ adminActionApi.get('/withdrawals/pending', async (c) => {
   }
 })
 
-// POST: Proses Approval / Rejection (Mendukung FormData untuk Upload File)
+// POST: Proses Approval / Rejection (Mendukung FormData untuk Upload File ke Cloudinary)
 adminActionApi.post('/withdrawals/process', async (c) => {
   const db = c.env.DB
   const admin = c.get('jwtPayload')
@@ -44,7 +44,7 @@ adminActionApi.post('/withdrawals/process', async (c) => {
     const formData = await c.req.formData()
     const withdrawId = String(formData.get('withdrawId'))
     const action = String(formData.get('action'))
-    const proofFile = formData.get('proof_file') 
+    const proofFile = formData.get('proof_file') as File | null
     
     // Cari admin user berdasarkan hu_id (sub)
     const adminUser = await db.prepare("SELECT id FROM users WHERE hu_id = ?").bind(admin.sub).first()
@@ -57,11 +57,31 @@ adminActionApi.post('/withdrawals/process', async (c) => {
     if (action === 'approve') {
       let proofUrl = ''
       
-      // Proses file bukti transfer
-      if (proofFile && typeof proofFile === 'object' && 'name' in proofFile) {
-        // [OPSIONAL] Di level production, Anda akan mengunggah file ini ke Cloudflare R2 / AWS S3.
-        // Untuk tahap ini, kita menyimulasikan URL dengan menyimpan nama filenya ke kolom url_bukti_transfer
-        proofUrl = `/uploads/${(proofFile as File).name}` 
+      // Upload file ke Cloudinary jika admin melampirkan gambar bukti transfer
+      if (proofFile && proofFile.size > 0) {
+        const cloudName = (c.env as any).CLOUDINARY_CLOUD_NAME || ''
+        const uploadPreset = (c.env as any).CLOUDINARY_UPLOAD_PRESET || ''
+        
+        if (!cloudName || !uploadPreset) {
+          throw new Error("Konfigurasi Cloudinary (CLOUDINARY_CLOUD_NAME atau CLOUDINARY_UPLOAD_PRESET) belum diatur di env.")
+        }
+
+        const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
+        const uploadData = new FormData()
+        uploadData.append('file', proofFile)
+        uploadData.append('upload_preset', uploadPreset)
+
+        const uploadRes = await fetch(cloudinaryUrl, {
+          method: 'POST',
+          body: uploadData
+        })
+
+        if (!uploadRes.ok) {
+          throw new Error("Gagal mengunggah bukti transfer ke Cloudinary.")
+        }
+
+        const uploadResult = (await uploadRes.json()) as any
+        proofUrl = uploadResult.secure_url
       }
 
       await db.prepare(
