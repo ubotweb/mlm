@@ -4,58 +4,61 @@ import { getCookie } from 'hono/cookie'
 
 const adminPaketApi = new Hono<{ Bindings: Env }>()
 
-adminPaketApi.use('/*', async (c, next) => {
+adminPaketApi.use('*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/login')
   try {
     const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
     if (decoded.role !== 'admin') return c.redirect('/member')
-    await next()
-  } catch (err) { return c.redirect('/login') }
+  } catch (err) { 
+    return c.redirect('/login') 
+  }
+  await next()
 })
 
-// CREATE PAKET BARU
+// CREATE PAKET BARU DENGAN PARAMETER HU
 adminPaketApi.post('/', async (c) => {
-  const db = c.env.DB
   try {
-    const body = await c.req.parseBody()
+    const db = c.env.DB
+    const formData = await c.req.formData() // Gunakan Native Form Data
     
     await db.prepare(`
-      INSERT INTO packages (id, name, registration_fee, discount_percentage, sponsor_bonus_amount, network_bonus_eligible, leadership_bonus_eligible)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO packages (id, name, registration_fee, discount_percentage, sponsor_bonus_amount, hu_count, product_count, network_bonus_eligible, leadership_bonus_eligible)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      body.id as string,
-      body.name as string,
-      Number(body.registration_fee),
-      Number(body.discount_percentage),
-      Number(body.sponsor_bonus_amount),
-      body.network_bonus_eligible ? 1 : 0,
-      body.leadership_bonus_eligible ? 1 : 0
+      String(formData.get('id')),
+      String(formData.get('name')),
+      Number(formData.get('registration_fee')) || 0,
+      Number(formData.get('discount_percentage')) || 0,
+      Number(formData.get('sponsor_bonus_amount')) || 0,
+      Number(formData.get('hu_count')) || 1,      // Menangkap jumlah HU
+      Number(formData.get('product_count')) || 1, // Menangkap jumlah Produk
+      formData.get('network_bonus_eligible') ? 1 : 0,
+      0 // Default leadership
     ).run()
 
-    return c.redirect('/admin/paket?success=Paket berhasil ditambahkan')
-  } catch (err) {
-    return c.redirect('/admin/paket?error=Gagal menambah paket. ID Paket mungkin sudah ada.')
+    return c.redirect('/admin/paket?success=Paket+Kemitraan+berhasil+ditambahkan')
+  } catch (err: any) {
+    return c.redirect(`/admin/paket?error=Gagal+menambah+paket.+ID+mungkin+sudah+ada.`)
   }
 })
 
 // HAPUS PAKET
 adminPaketApi.post('/delete', async (c) => {
-  const db = c.env.DB
   try {
-    const body = await c.req.parseBody()
-    const paketId = body.id as string
+    const db = c.env.DB
+    const formData = await c.req.formData()
+    const paketId = String(formData.get('id'))
 
-    // Pastikan untuk mencegah penghapusan jika ada user yang menggunakan paket ini
     const checkUser = await db.prepare("SELECT id FROM users WHERE package_id = ?").bind(paketId).first()
     if (checkUser) {
-      return c.redirect('/admin/paket?error=Gagal menghapus: Ada member yang sedang menggunakan paket ini.')
+      return c.redirect('/admin/paket?error=Gagal+menghapus:+Ada+member+yang+sedang+menggunakan+paket+ini.')
     }
 
     await db.prepare("DELETE FROM packages WHERE id = ?").bind(paketId).run()
-    return c.redirect('/admin/paket?success=Paket berhasil dihapus')
+    return c.redirect('/admin/paket?success=Paket+berhasil+dihapus+permanen')
   } catch (err) {
-    return c.redirect('/admin/paket?error=Terjadi kesalahan saat menghapus paket.')
+    return c.redirect('/admin/paket?error=Terjadi+kesalahan+sistem')
   }
 })
 
