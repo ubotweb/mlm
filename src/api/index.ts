@@ -44,12 +44,12 @@ api.route('/member/pin', memberPinApi)
 // Menyelaraskan endpoint dengan action form di UI (Singular & Bahasa Indonesia)
 api.route('/admin/stats', adminApi) 
 api.route('/admin/action', adminActionApi)
-api.route('/admin/produk', adminProductApi)      // SEBELUMNYA: /admin/products
-api.route('/admin/member', adminMemberApi)       // SEBELUMNYA: /admin/members
-api.route('/admin/order', adminOrderApi)         // SEBELUMNYA: /admin/orders
-api.route('/admin/broadcast', adminBroadcastApi) // SEBELUMNYA: /admin/broadcasts
-api.route('/admin/pengaturan', adminSettingsApi) // SEBELUMNYA: /admin/settings
-api.route('/admin/bonus', adminBonusApi)         // SEBELUMNYA: /admin/bonuses
+api.route('/admin/produk', adminProductApi) 
+api.route('/admin/member', adminMemberApi) 
+api.route('/admin/order', adminOrderApi) 
+api.route('/admin/broadcast', adminBroadcastApi)
+api.route('/admin/pengaturan', adminSettingsApi)
+api.route('/admin/bonus', adminBonusApi)  
 api.route('/admin/paket', adminPaketApi)
 
 // --- MIDDLEWARE AUTH UNTUK ENDPOINT DASAR DI INDEX ---
@@ -113,7 +113,7 @@ api.post('/login', async (c) => {
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
       secure: true,       
-      sameSite: 'None', // <--- MENGUBAH LAX MENJADI NONE UNTUK PAYMENT GATEWAY CROSS-SITE
+      sameSite: 'None',
       path: '/',
       maxAge: 60 * 60 * 24
     })
@@ -132,7 +132,7 @@ api.post('/login', async (c) => {
 // --- ENDPOINT LOGOUT ---
 api.post('/logout', async (c) => {
   deleteCookie(c, 'auth_token', { path: '/' })
-  return c.redirect('/login') // Saya ubah redirect agar user langsung terlempar ke halaman login
+  return c.redirect('/login') // User langsung terlempar ke halaman login
 })
 
 // --- ENDPOINT PUBLIK ---
