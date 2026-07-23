@@ -10,13 +10,13 @@ export default createRoute(async (c) => {
     <div class="min-h-screen bg-[#0B0E14] text-white font-sans selection:bg-emerald-500/30">
       
       {/* 1. Header & Navigasi */}
-      <header class="container mx-auto px-6 py-6 flex justify-between items-center">
+      <header class="container mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
         <h1 class="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-wider">
           HMM<span class="font-light text-white">BEAUTY</span>
         </h1>
-        <div class="space-x-4">
-          <a href="/login" class="text-gray-300 hover:text-white font-bold transition">Masuk Sesi</a>
-          <a href="/register" class="bg-emerald-500 hover:bg-emerald-600 text-[#0B0E14] px-5 py-2.5 rounded-full font-black transition-all shadow-lg shadow-emerald-500/20 uppercase tracking-wider text-sm">Daftar Kemitraan</a>
+        <div class="flex items-center space-x-3 md:space-x-4">
+          <a href="/login" class="text-gray-300 hover:text-white font-bold transition text-sm md:text-base whitespace-nowrap">Masuk Sesi</a>
+          <a href="/register" class="bg-emerald-500 hover:bg-emerald-600 text-[#0B0E14] px-4 py-2 md:px-5 md:py-2.5 rounded-full font-black transition-all shadow-lg shadow-emerald-500/20 uppercase tracking-wider text-xs md:text-sm whitespace-nowrap">Daftar Kemitraan</a>
         </div>
       </header>
 
