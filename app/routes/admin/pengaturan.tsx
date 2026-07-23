@@ -35,7 +35,8 @@ export default createRoute(async (c) => {
       {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
       {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
 
-      <form method="POST" action="/api/admin/settings" class="space-y-6 max-w-4xl bg-[#151921] border border-[#222731] rounded-2xl shadow-sm overflow-hidden p-6 md:p-8">
+      {/* PERBAIKAN: action diubah dari /api/admin/settings menjadi /api/admin/pengaturan */}
+      <form method="POST" action="/api/admin/pengaturan" class="space-y-6 max-w-4xl bg-[#151921] border border-[#222731] rounded-2xl shadow-sm overflow-hidden p-6 md:p-8">
         
         <h4 class="text-white font-black uppercase tracking-widest text-sm mb-4 border-b border-[#222731] pb-4">Parameter Bonus MLM Binary</h4>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
