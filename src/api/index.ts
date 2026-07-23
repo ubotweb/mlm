@@ -67,48 +67,46 @@ api.use('/profile-basic/*', async (c, next) => {
   }
 })
 
-// --- ENDPOINT LOGIN ---
+// --- ENDPOINT LOGIN (Berbasis HU ID / HMMxxxxxxxxxx) ---
 api.post('/login', async (c) => {
   const body = await c.req.parseBody()
-  const username = body.username as string
+  const huId = (body.hu_id || body.username) as string // Mendukung input hu_id
   const password = body.password as string
   
-  if (!username || !password) {
-    return c.redirect('/login?error=Username dan password wajib diisi')
+  if (!huId || !password) {
+    return c.redirect('/login?error=ID Hak Usaha (HU ID) dan Password wajib diisi')
   }
 
   try {
     const db = c.env.DB
 
-    // 1. Cari user di database berdasarkan username
-    const user = await db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first()
+    // 1. Cari user berdasarkan hu_id atau 'admin'
+    const user = await db.prepare("SELECT * FROM users WHERE hu_id = ?").bind(huId.trim()).first()
     
     if (!user) {
-      return c.redirect('/login?error=Username atau password salah')
+      return c.redirect('/login?error=ID Hak Usaha tidak terdaftar di sistem')
     }
 
-    // 2. Hash password yang diinput untuk dicocokkan dengan database
+    // 2. Hash password SHA-256
     const encoder = new TextEncoder()
     const data = encoder.encode(password)
     const hashBuffer = await crypto.subtle.digest('SHA-256', data)
     const hashArray = Array.from(new Uint8Array(hashBuffer))
     const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 
-    // 3. Verifikasi kecocokan password
     if (user.password_hash !== hashedPassword) {
-      return c.redirect('/login?error=Username atau password salah')
+      return c.redirect('/login?error=Password yang Anda masukkan salah')
     }
     
-    // 4. Buat Token JWT dengan ROLE ASLI dari database
+    // 3. Buat Token JWT
     const payload = {
-      sub: user.username,
+      sub: user.hu_id, // Menggunakan hu_id sebagai subjek token
       role: user.role, 
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 
     }
     
     const token = await sign(payload, c.env.JWT_SECRET, 'HS256')
     
-    // 5. Tanamkan Cookie
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
       secure: true,       
@@ -117,7 +115,6 @@ api.post('/login', async (c) => {
       maxAge: 60 * 60 * 24
     })
     
-    // 6. Redirect cerdas berdasarkan Role
     if (user.role === 'admin') {
       return c.redirect('/admin')
     } else {
