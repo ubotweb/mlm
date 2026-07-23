@@ -109,10 +109,11 @@ api.post('/login', async (c) => {
     
     const token = await sign(payload, c.env.JWT_SECRET, 'HS256')
     
+    // 4. Tanamkan Cookie (PERBAIKAN SAMESITE: NONE)
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
       secure: true,       
-      sameSite: 'Lax',
+      sameSite: 'None', // <--- MENGUBAH LAX MENJADI NONE UNTUK PAYMENT GATEWAY CROSS-SITE
       path: '/',
       maxAge: 60 * 60 * 24
     })
