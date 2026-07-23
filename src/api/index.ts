@@ -112,7 +112,7 @@ api.post('/login', async (c) => {
     setCookie(c, 'auth_token', token, {
       httpOnly: true,
       secure: true,       
-      sameSite: 'Strict',
+      sameSite: 'Lax',
       path: '/',
       maxAge: 60 * 60 * 24
     })
