@@ -4,6 +4,62 @@ import { getCookie } from 'hono/cookie'
 
 const adminActionApi = new Hono<{ Bindings: Env; Variables: { jwtPayload: any } }>()
 
+// =========================================================================
+// FUNGSI HELPER: Konversi File ke Base64 
+// (Kunci Utama pencegah V8 Engine Crash di Cloudflare Worker)
+// =========================================================================
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// FUNGSI UPLOAD CLOUDINARY (Anti-Crash & Signed)
+async function uploadToCloudinary(file: File, env: any): Promise<string> {
+  const cloudName = env.CLOUDINARY_CLOUD_NAME
+  const apiKey = env.CLOUDINARY_API_KEY
+  const apiSecret = env.CLOUDINARY_API_SECRET
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error("Kredensial API Cloudinary tidak ditemukan di pengaturan Environment Variables!")
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  const strToSign = `timestamp=${timestamp}${apiSecret}`
+  const encoder = new TextEncoder()
+  const data = encoder.encode(strToSign)
+  const hashBuffer = await crypto.subtle.digest('SHA-1', data)
+  const signature = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  // Ektraksi File menjadi teks Base64 untuk menghindari Panic Stream
+  const buffer = await file.arrayBuffer()
+  const base64 = arrayBufferToBase64(buffer)
+  const dataUri = `data:${file.type || 'image/jpeg'};base64,${base64}`
+
+  const fd = new FormData()
+  fd.append('file', dataUri) // Dikirim sebagai TEKS, Cloudflare aman 100%
+  fd.append('api_key', apiKey)
+  fd.append('timestamp', timestamp)
+  fd.append('signature', signature)
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    body: fd
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Upload Cloudinary Gagal: ${errText}`)
+  }
+  
+  const result: any = await res.json()
+  return result.secure_url
+}
+// =========================================================================
+
 // Middleware proteksi Admin
 adminActionApi.use('/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
@@ -35,7 +91,7 @@ adminActionApi.get('/withdrawals/pending', async (c) => {
   }
 })
 
-// POST: Proses Approval / Rejection (Mendukung FormData untuk Upload File ke Cloudinary)
+// POST: Proses Approval / Rejection (Mendukung FormData untuk Upload File)
 adminActionApi.post('/withdrawals/process', async (c) => {
   const db = c.env.DB
   const admin = c.get('jwtPayload')
@@ -44,7 +100,7 @@ adminActionApi.post('/withdrawals/process', async (c) => {
     const formData = await c.req.formData()
     const withdrawId = String(formData.get('withdrawId'))
     const action = String(formData.get('action'))
-    const proofFile = formData.get('proof_file') as File | null
+    const proofFile = formData.get('proof_file')
     
     // Cari admin user berdasarkan hu_id (sub)
     const adminUser = await db.prepare("SELECT id FROM users WHERE hu_id = ?").bind(admin.sub).first()
@@ -57,31 +113,9 @@ adminActionApi.post('/withdrawals/process', async (c) => {
     if (action === 'approve') {
       let proofUrl = ''
       
-      // Upload file ke Cloudinary jika admin melampirkan gambar bukti transfer
-      if (proofFile && proofFile.size > 0) {
-        const cloudName = (c.env as any).CLOUDINARY_CLOUD_NAME || ''
-        const uploadPreset = (c.env as any).CLOUDINARY_UPLOAD_PRESET || ''
-        
-        if (!cloudName || !uploadPreset) {
-          throw new Error("Konfigurasi Cloudinary (CLOUDINARY_CLOUD_NAME atau CLOUDINARY_UPLOAD_PRESET) belum diatur di env.")
-        }
-
-        const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
-        const uploadData = new FormData()
-        uploadData.append('file', proofFile)
-        uploadData.append('upload_preset', uploadPreset)
-
-        const uploadRes = await fetch(cloudinaryUrl, {
-          method: 'POST',
-          body: uploadData
-        })
-
-        if (!uploadRes.ok) {
-          throw new Error("Gagal mengunggah bukti transfer ke Cloudinary.")
-        }
-
-        const uploadResult = (await uploadRes.json()) as any
-        proofUrl = uploadResult.secure_url
+      // Upload file ke Cloudinary menggunakan fungsi helper anti-crash
+      if (proofFile && proofFile instanceof File && proofFile.size > 0) {
+        proofUrl = await uploadToCloudinary(proofFile, c.env)
       }
 
       await db.prepare(
