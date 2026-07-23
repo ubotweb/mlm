@@ -16,11 +16,11 @@ adminPaketApi.use('*', async (c, next) => {
   await next()
 })
 
-// CREATE PAKET BARU DENGAN PARAMETER HU
+// CREATE PAKET BARU
 adminPaketApi.post('/', async (c) => {
   try {
     const db = c.env.DB
-    const formData = await c.req.formData() // Gunakan Native Form Data
+    const formData = await c.req.formData()
     
     await db.prepare(`
       INSERT INTO packages (id, name, registration_fee, discount_percentage, sponsor_bonus_amount, hu_count, product_count, network_bonus_eligible, leadership_bonus_eligible)
@@ -31,15 +31,48 @@ adminPaketApi.post('/', async (c) => {
       Number(formData.get('registration_fee')) || 0,
       Number(formData.get('discount_percentage')) || 0,
       Number(formData.get('sponsor_bonus_amount')) || 0,
-      Number(formData.get('hu_count')) || 1,      // Menangkap jumlah HU
-      Number(formData.get('product_count')) || 1, // Menangkap jumlah Produk
+      Number(formData.get('hu_count')) || 1,
+      Number(formData.get('product_count')) || 1,
       formData.get('network_bonus_eligible') ? 1 : 0,
-      0 // Default leadership
+      0
     ).run()
 
     return c.redirect('/admin/paket?success=Paket+Kemitraan+berhasil+ditambahkan')
   } catch (err: any) {
     return c.redirect(`/admin/paket?error=Gagal+menambah+paket.+ID+mungkin+sudah+ada.`)
+  }
+})
+
+// UPDATE PAKET (EDIT)
+adminPaketApi.post('/update', async (c) => {
+  try {
+    const db = c.env.DB
+    const formData = await c.req.formData()
+    
+    await db.prepare(`
+      UPDATE packages SET 
+        name = ?, 
+        registration_fee = ?, 
+        discount_percentage = ?, 
+        sponsor_bonus_amount = ?, 
+        hu_count = ?, 
+        product_count = ?, 
+        network_bonus_eligible = ?
+      WHERE id = ?
+    `).bind(
+      String(formData.get('name')),
+      Number(formData.get('registration_fee')) || 0,
+      Number(formData.get('discount_percentage')) || 0,
+      Number(formData.get('sponsor_bonus_amount')) || 0,
+      Number(formData.get('hu_count')) || 1,
+      Number(formData.get('product_count')) || 1,
+      formData.get('network_bonus_eligible') ? 1 : 0,
+      String(formData.get('id'))
+    ).run()
+
+    return c.redirect('/admin/paket?success=Paket+Kemitraan+berhasil+diperbarui')
+  } catch (err: any) {
+    return c.redirect(`/admin/paket?error=Gagal+memperbarui+paket`)
   }
 })
 
