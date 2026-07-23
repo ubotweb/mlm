@@ -10,11 +10,13 @@ export default createRoute(async (c) => {
   try { profile = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  // PERBAIKAN: Menggunakan hu_id
   const user = await db.prepare("SELECT balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
   if (!user) return c.redirect('/login')
   
   const { results: products } = await db.prepare("SELECT * FROM products WHERE is_active = 1 ORDER BY category ASC, created_at DESC").all()
+
+  const errorMsg = c.req.query('error')
+  const successMsg = c.req.query('success')
 
   return c.render(
     <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Belanja (Repeat Order)">
@@ -22,6 +24,9 @@ export default createRoute(async (c) => {
         <h2 class="text-3xl font-black text-white">Katalog Produk & RO</h2>
         <p class="text-[#8B949E] text-sm mt-1 font-medium">Belanja ulang (Repeat Order) produk skincare & kesehatan HMM dengan harga khusus member.</p>
       </div>
+
+      {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
+      {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
 
       {products.length === 0 ? (
         <div class="bg-[#151921] border border-[#222731] rounded-2xl p-10 text-center">
@@ -52,9 +57,8 @@ export default createRoute(async (c) => {
                   <p class="text-[10px] text-yellow-500 font-bold mt-1">Stok: {p.stock} Pcs</p>
                 </div>
                 
-                <form action="/checkout" method="GET">
-                  <input type="hidden" name="type" value="product" />
-                  <input type="hidden" name="id" value={p.id} />
+                <form action="/api/checkout/ro" method="POST" onsubmit="return confirm('Proses pembelian Repeat Order? Anda akan diarahkan ke Midtrans.');">
+                  <input type="hidden" name="product_id" value={p.id} />
                   <button type="submit" class="w-full bg-[#1A1E26] hover:bg-emerald-500 text-gray-300 hover:text-[#0B0E14] border border-[#2D3342] hover:border-emerald-500 font-black py-3 rounded-xl transition-colors text-xs uppercase tracking-widest">
                     Beli Produk
                   </button>
