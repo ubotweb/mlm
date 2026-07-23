@@ -38,19 +38,19 @@ api.route('/member/orders', orderApi)
 api.route('/member/settings', profileApi)
 api.route('/member/downlines', downlineApi)
 
-// Routing Area Admin
-api.route('/admin/stats', adminApi) // Jika root admin.ts menggunakan get('/stats')
+// --- PERBAIKAN FATAL: Routing Area Admin ---
+// Menyelaraskan endpoint dengan action form di UI (Singular & Bahasa Indonesia)
+api.route('/admin/stats', adminApi) 
 api.route('/admin/action', adminActionApi)
-api.route('/admin/products', adminProductApi)
-api.route('/admin/members', adminMemberApi)
-api.route('/admin/orders', adminOrderApi)
-api.route('/admin/broadcasts', adminBroadcastApi)
-api.route('/admin/settings', adminSettingsApi)
-api.route('/admin/bonuses', adminBonusApi)
+api.route('/admin/produk', adminProductApi)      // SEBELUMNYA: /admin/products
+api.route('/admin/member', adminMemberApi)       // SEBELUMNYA: /admin/members
+api.route('/admin/order', adminOrderApi)         // SEBELUMNYA: /admin/orders
+api.route('/admin/broadcast', adminBroadcastApi) // SEBELUMNYA: /admin/broadcasts
+api.route('/admin/pengaturan', adminSettingsApi) // SEBELUMNYA: /admin/settings
+api.route('/admin/bonus', adminBonusApi)         // SEBELUMNYA: /admin/bonuses
 api.route('/admin/paket', adminPaketApi)
 
 // --- MIDDLEWARE AUTH UNTUK ENDPOINT DASAR DI INDEX ---
-// Digunakan hanya untuk endpoint 'profile' dasar di bawah ini
 api.use('/profile-basic/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
   
@@ -102,8 +102,8 @@ api.post('/login', async (c) => {
     // 4. Buat Token JWT dengan ROLE ASLI dari database
     const payload = {
       sub: user.username,
-      role: user.role, // Kunci perbaikannya ada di sini ('admin' atau 'member')
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // Expired 24 jam
+      role: user.role, 
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 
     }
     
     const token = await sign(payload, c.env.JWT_SECRET, 'HS256')
@@ -128,15 +128,15 @@ api.post('/login', async (c) => {
     return c.redirect('/login?error=Terjadi kesalahan pada server')
   }
 })
+
 // --- ENDPOINT LOGOUT ---
 api.post('/logout', async (c) => {
   deleteCookie(c, 'auth_token', { path: '/' })
-  return c.json({ message: 'Logout berhasil' })
+  return c.redirect('/login') // Saya ubah redirect agar user langsung terlempar ke halaman login
 })
 
 // --- ENDPOINT PUBLIK ---
 api.get('/products', async (c) => {
-  // Dalam real-case, Anda bisa melakukan fetch dari c.env.DB
   return c.json([
     { id: '1', name: 'Facial Wash', price: 75000, category: 'Skincare' },
     { id: '2', name: 'Brightening Serum', price: 125000, category: 'Skincare' },
