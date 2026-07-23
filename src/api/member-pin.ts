@@ -33,7 +33,7 @@ memberPinApi.post('/buy', async (c) => {
     const invoiceNumber = `INV-PIN-${Date.now()}`
     const amount = Number(pkg.registration_fee)
 
-    // PERBAIKAN: Menyuntikkan placeholder untuk shipping_address agar lolos validasi NOT NULL database
+    // Menyuntikkan placeholder untuk shipping_address agar lolos validasi NOT NULL database
     await db.prepare(`
       INSERT INTO orders (id, invoice_number, user_id, subtotal, shipping_cost, total_amount, status, payment_method, shipping_address) 
       VALUES (?, ?, ?, ?, 0, ?, 'pending', 'Midtrans', 'Digital PIN (Produk belum diklaim)')
@@ -54,14 +54,19 @@ memberPinApi.post('/buy', async (c) => {
 
     if (!serverKey) throw new Error("Kunci API Midtrans belum diatur oleh Administrator.")
 
-    // Panggil Midtrans Snap API
+    // === GENERATE WEBHOOK URL OTOMATIS BERDASARKAN DOMAIN SAAT INI ===
+    const requestUrl = new URL(c.req.url)
+    const webhookUrl = `${requestUrl.protocol}//${requestUrl.host}/api/webhook/payment-callback`
+
+    // Panggil Midtrans Snap API dengan tambahan Header X-Override-Notification
     const authString = btoa(`${serverKey}:`)
     const response = await fetch(midtransUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${authString}`
+        'Authorization': `Basic ${authString}`,
+        'X-Override-Notification': webhookUrl // <-- MIDTRANS AKAN OTOMATIS MENEMBAK KE SINI
       },
       body: JSON.stringify({
         transaction_details: {
