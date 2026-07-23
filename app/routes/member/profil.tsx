@@ -10,7 +10,8 @@ export default createRoute(async (c) => {
   try { profile = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  const user = await db.prepare("SELECT full_name, email, phone, balance FROM users WHERE username = ?").bind(profile.sub).first()
+  // PERBAIKAN: Mengubah pencarian dari username menjadi hu_id
+  const user = await db.prepare("SELECT full_name, email, phone, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
   
   const successMsg = c.req.query('success')
   const errorMsg = c.req.query('error')
