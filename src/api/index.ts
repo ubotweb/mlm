@@ -12,6 +12,7 @@ import bonusApi from './bonus'
 import orderApi from './order'
 import profileApi from './profile'
 import downlineApi from './downline'
+import memberPinApi from './member-pin'
 
 import adminApi from './admin'
 import adminActionApi from './admin-action'
@@ -37,6 +38,7 @@ api.route('/member/bonus', bonusApi)
 api.route('/member/orders', orderApi)
 api.route('/member/settings', profileApi)
 api.route('/member/downlines', downlineApi)
+api.route('/member/pin', memberPinApi)
 
 // --- PERBAIKAN FATAL: Routing Area Admin ---
 // Menyelaraskan endpoint dengan action form di UI (Singular & Bahasa Indonesia)
