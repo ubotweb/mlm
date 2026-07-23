@@ -39,7 +39,8 @@ export default createRoute(async (c) => {
           <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731]">
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Form Withdraw</h4>
           </div>
-          <form method="POST" action="/api/withdraw" class="p-6 space-y-4">
+          {/* PERBAIKAN FATAL: action="/api/member/withdraw" */}
+          <form method="POST" action="/api/member/withdraw" class="p-6 space-y-4">
             <div>
               <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Nominal Penarikan (Rp)</label>
               <input type="number" name="amount" min={minWithdraw} max={user.balance} required class="w-full bg-[#0B0E14] border border-[#2D3342] text-emerald-400 font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 text-sm" placeholder="50000" />
