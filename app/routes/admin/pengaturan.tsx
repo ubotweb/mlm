@@ -13,8 +13,8 @@ export default createRoute(async (c) => {
   } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  // Tarik array setting menjadi object format
-  const { results } = await db.prepare("SELECT key, value FROM site_settings").all()
+  const { results } = await db.prepare("SELECT * FROM site_settings").all()
+  
   const settings = results.reduce((acc: any, curr: any) => {
     acc[curr.key] = curr.value
     return acc
@@ -24,51 +24,65 @@ export default createRoute(async (c) => {
   const errorMsg = c.req.query('error')
 
   return c.render(
-    <AdminLayout profile={profile} activeMenu="Pengaturan Website">
-      <div class="mb-6">
-        <h2 class="text-2xl font-bold text-white">Pengaturan Website</h2>
-        <p class="text-[#8B949E] text-sm mt-1">Kelola parameter inti sistem MLM dan data operasional utama.</p>
+    <AdminLayout profile={profile} activeMenu="Pengaturan Sistem">
+      <div class="mb-6 flex justify-between items-end">
+        <div>
+          <h2 class="text-2xl font-black text-white">Pengaturan Global Sistem</h2>
+          <p class="text-[#8B949E] text-sm mt-1 font-medium">Konfigurasi parameter MLM Binary, batas pencairan, dan API Midtrans.</p>
+        </div>
       </div>
 
-      {successMsg && <div class="bg-[#00E676]/10 border border-[#00E676]/30 text-[#00E676] p-4 rounded-lg mb-6 text-sm font-bold">{successMsg}</div>}
-      {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-6 text-sm font-bold">{errorMsg}</div>}
+      {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
+      {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
 
-      <form method="POST" action="/api/admin/settings" class="bg-[#151921] border border-[#222731] rounded-xl overflow-hidden shadow-sm max-w-3xl">
-        <div class="bg-[#1A1E26] px-6 py-4 border-b border-[#222731]">
-          <h4 class="font-bold text-white text-sm">Parameter Sistem</h4>
+      <form method="POST" action="/api/admin/settings" class="space-y-6 max-w-4xl bg-[#151921] border border-[#222731] rounded-2xl shadow-sm overflow-hidden p-6 md:p-8">
+        
+        <h4 class="text-white font-black uppercase tracking-widest text-sm mb-4 border-b border-[#222731] pb-4">Parameter Bonus MLM Binary</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div>
+            <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Bonus Pasangan (Rp)</label>
+            <input type="number" name="pairing_bonus_amount" defaultValue={settings.pairing_bonus_amount || 50000} class="w-full bg-[#0B0E14] border border-[#2D3342] text-emerald-400 font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Batas Flush Out (Pasang/Hari)</label>
+            <input type="number" name="pairing_flush_limit" defaultValue={settings.pairing_flush_limit || 12} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Bonus Titik RO (Rp)</label>
+            <input type="number" name="ro_bonus_amount" defaultValue={settings.ro_bonus_amount || 5000} class="w-full bg-[#0B0E14] border border-[#2D3342] text-emerald-400 font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Batas Kedalaman Bonus RO (Level)</label>
+            <input type="number" name="ro_bonus_depth_limit" defaultValue={settings.ro_bonus_depth_limit || 10} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
+          </div>
         </div>
-        <div class="p-6 space-y-5">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        <h4 class="text-white font-black uppercase tracking-widest text-sm mb-4 border-b border-[#222731] pb-4">Integrasi Midtrans Gateway & Penarikan</h4>
+        <div class="grid grid-cols-1 gap-6 mb-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Nama Website (Brand)</label>
-              <input type="text" name="site_name" defaultValue={settings.site_name || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none" />
+              <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Minimal Withdraw (Rp)</label>
+              <input type="number" name="withdraw_min_amount" defaultValue={settings.withdraw_min_amount || 50000} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
             </div>
             <div>
-              <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Email Kontak Support</label>
-              <input type="email" name="contact_email" defaultValue={settings.contact_email || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none" />
+              <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Mode Midtrans (1 = Produksi, 0 = Sandbox)</label>
+              <input type="number" name="midtrans_is_production" defaultValue={settings.midtrans_is_production || 0} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-black tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
             </div>
           </div>
           <div>
-            <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Tagline Perusahaan</label>
-            <input type="text" name="tagline" defaultValue={settings.tagline || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none" />
+            <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Midtrans Server Key</label>
+            <input type="password" name="midtrans_server_key" defaultValue={settings.midtrans_server_key || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-mono tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Minimal Saldo Withdraw (Rp)</label>
-              <input type="number" name="withdraw_min_amount" defaultValue={settings.withdraw_min_amount || '50000'} class="w-full bg-[#0B0E14] border border-[#2D3342] text-[#00E676] font-bold rounded-lg px-4 py-3 focus:outline-none tracking-widest" />
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Status Environment</label>
-              <select name="environment" class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none font-bold text-xs uppercase">
-                <option value="production" selected={settings.environment === 'production'}>Production (Live)</option>
-                <option value="development" selected={settings.environment === 'development'}>Development (Uji Coba)</option>
-              </select>
-            </div>
+          <div>
+            <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Midtrans Client Key</label>
+            <input type="text" name="midtrans_client_key" defaultValue={settings.midtrans_client_key || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-mono tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm" />
           </div>
-          
-          <div class="pt-6 border-t border-[#222731]">
-            <button type="submit" class="bg-[#00E676] hover:bg-[#00C853] text-[#0B0E14] font-bold py-3 px-8 rounded-lg transition-colors text-sm shadow-lg shadow-[#00E676]/20">Simpan Pengaturan</button>
-          </div>
+        </div>
+
+        <div class="pt-4 border-t border-[#222731]">
+          <button type="submit" class="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-xl transition-colors shadow-lg shadow-blue-600/20 uppercase tracking-widest text-xs">
+            Simpan Konfigurasi
+          </button>
         </div>
       </form>
     </AdminLayout>
