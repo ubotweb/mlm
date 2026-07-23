@@ -1,7 +1,11 @@
 import { createRoute } from 'honox/factory'
-import ProductList from '../islands/ProductList' // Memanggil komponen produk
 
-export default createRoute((c) => {
+export default createRoute(async (c) => {
+  const db = c.env.DB
+  
+  // Menarik data maksimal 8 produk aktif terbaru langsung dari database D1
+  const { results: products } = await db.prepare("SELECT * FROM products WHERE is_active = 1 ORDER BY created_at DESC LIMIT 8").all()
+
   return c.render(
     <div class="min-h-screen bg-[#0B0E14] text-white font-sans selection:bg-emerald-500/30">
       
@@ -11,24 +15,24 @@ export default createRoute((c) => {
           HMM<span class="font-light text-white">BEAUTY</span>
         </h1>
         <div class="space-x-4">
-          <a href="/login" class="text-gray-300 hover:text-white font-semibold transition">Masuk</a>
-          <a href="/register" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-full font-bold transition-all shadow-lg shadow-emerald-500/20">Daftar Kemitraan</a>
+          <a href="/login" class="text-gray-300 hover:text-white font-bold transition">Masuk Sesi</a>
+          <a href="/register" class="bg-emerald-500 hover:bg-emerald-600 text-[#0B0E14] px-5 py-2.5 rounded-full font-black transition-all shadow-lg shadow-emerald-500/20 uppercase tracking-wider text-sm">Daftar Kemitraan</a>
         </div>
       </header>
 
       {/* 2. Hero Section (Banner) */}
       <section class="container mx-auto px-6 py-20 text-center">
-        <h2 class="text-5xl md:text-6xl font-bold mb-6">Cantik Alami, Sehat Berkualitas,<br/> <span class="text-emerald-400">Sukses Bersama.</span></h2>
-        <p class="text-gray-400 text-lg max-w-2xl mx-auto mb-10">
-          Bergabunglah dengan jaringan HMM Beauty. Nikmati produk kesehatan & kecantikan terbaik sekaligus bangun kebebasan finansial Anda.
+        <h2 class="text-5xl md:text-6xl font-black mb-6 leading-tight">Cantik Alami, Sehat Berkualitas,<br/> <span class="text-emerald-400">Sukses Bersama.</span></h2>
+        <p class="text-[#8B949E] text-lg max-w-2xl mx-auto mb-10 font-medium">
+          Bergabunglah dengan jaringan HMM Beauty. Nikmati produk kesehatan & kecantikan terbaik sekaligus bangun kebebasan finansial Anda tanpa batas.
         </p>
-        <a href="#paket" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-all inline-block">Mulai Perjalanan Anda</a>
+        <a href="#paket" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full font-black transition-all inline-block shadow-lg shadow-blue-600/20 uppercase tracking-widest text-sm">Mulai Perjalanan Anda</a>
       </section>
 
       {/* 3. Section Paket MLM */}
       <section id="paket" class="bg-[#151921] py-20 border-y border-[#222731]">
         <div class="container mx-auto px-6">
-          <h3 class="text-3xl font-bold text-center mb-12">Pilihan <span class="text-emerald-400">Paket Kemitraan</span></h3>
+          <h3 class="text-3xl font-black text-center mb-12">Pilihan <span class="text-emerald-400">Paket Kemitraan</span></h3>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             
             {/* Starter */}
@@ -40,7 +44,7 @@ export default createRoute((c) => {
                 <li class="opacity-50">❌ Diskon Produk</li>
                 <li class="opacity-50">❌ Bonus Jaringan</li>
               </ul>
-              <a href="/register?paket=starter" class="block w-full bg-[#2D3342] hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all">Pilih Starter</a>
+              <a href="/register?paket=starter" class="block w-full bg-[#2D3342] hover:bg-emerald-500 hover:text-[#0B0E14] text-white py-3 rounded-lg font-bold transition-colors">Pilih Starter</a>
             </div>
 
             {/* Silver */}
@@ -52,12 +56,12 @@ export default createRoute((c) => {
                 <li>✔️ Diskon Produk 10%</li>
                 <li>✔️ Bonus Jaringan</li>
               </ul>
-              <a href="/register?paket=silver" class="block w-full bg-[#2D3342] hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all">Pilih Silver</a>
+              <a href="/register?paket=silver" class="block w-full bg-[#2D3342] hover:bg-emerald-500 hover:text-[#0B0E14] text-white py-3 rounded-lg font-bold transition-colors">Pilih Silver</a>
             </div>
 
             {/* Gold (Populer) */}
             <div class="bg-[#1A1E26] border-2 border-blue-500 p-8 rounded-2xl relative text-center transform md:-translate-y-4 shadow-2xl shadow-blue-500/20">
-              <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wider">Terbaik</div>
+              <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest">Terbaik</div>
               <h4 class="text-xl font-bold mb-2 text-white mt-2">Gold</h4>
               <p class="text-blue-400 text-3xl font-black mb-6">Rp 1,5 Jt</p>
               <ul class="text-sm text-gray-300 space-y-3 mb-8 text-left">
@@ -65,7 +69,7 @@ export default createRoute((c) => {
                 <li>✔️ Diskon Produk 20%</li>
                 <li>✔️ Bonus Jaringan & Leadership</li>
               </ul>
-              <a href="/register?paket=gold" class="block w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold transition-all shadow-lg">Pilih Gold</a>
+              <a href="/register?paket=gold" class="block w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold transition-all shadow-lg">Pilih Gold</a>
             </div>
 
             {/* Platinum */}
@@ -77,23 +81,58 @@ export default createRoute((c) => {
                 <li>✔️ Diskon Produk 30%</li>
                 <li>✔️ Semua Bonus Terbuka</li>
               </ul>
-              <a href="/register?paket=platinum" class="block w-full bg-[#2D3342] hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all">Pilih Platinum</a>
+              <a href="/register?paket=platinum" class="block w-full bg-[#2D3342] hover:bg-emerald-500 hover:text-[#0B0E14] text-white py-3 rounded-lg font-bold transition-colors">Pilih Platinum</a>
             </div>
 
           </div>
         </div>
       </section>
 
-      {/* 4. Section Katalog Produk Terintegrasi */}
+      {/* 4. Section Katalog Produk Terintegrasi (SSR Murni) */}
       <section class="container mx-auto px-6 py-20">
-        <h3 class="text-3xl font-bold text-center mb-4">Katalog <span class="text-emerald-400">Produk</span></h3>
-        <p class="text-center text-gray-400 mb-12">Rangkaian produk premium untuk menunjang kesehatan dan kecantikan Anda.</p>
+        <h3 class="text-3xl font-black text-center mb-4">Katalog <span class="text-emerald-400">Produk</span></h3>
+        <p class="text-center text-[#8B949E] mb-12 font-medium">Rangkaian produk premium untuk menunjang kesehatan dan kecantikan Anda.</p>
         
-        {/* Island Component untuk Produk */}
-        <ProductList />
+        {products.length === 0 ? (
+          <div class="bg-[#151921] border border-[#222731] rounded-2xl p-10 text-center max-w-2xl mx-auto">
+             <p class="text-[#8B949E] font-bold">Produk belum tersedia. Katalog sedang dalam tahap pembaruan.</p>
+          </div>
+        ) : (
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {products.map((p: any) => (
+              <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm flex flex-col group hover:border-[#2D3342] transition-colors">
+                <div class="h-56 bg-[#1A1E26] relative overflow-hidden flex items-center justify-center">
+                  {p.image_url ? (
+                    <img src={p.image_url} alt={p.name} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  ) : (
+                    <svg class="w-16 h-16 text-[#2D3342]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                  )}
+                  <span class="absolute top-4 left-4 bg-[#0B0E14]/80 backdrop-blur border border-[#222731] text-[10px] font-black text-emerald-400 px-3 py-1.5 rounded uppercase tracking-widest">
+                    {p.category}
+                  </span>
+                </div>
+                
+                <div class="p-6 flex-1 flex flex-col">
+                  <h3 class="font-bold text-white text-lg mb-2 leading-tight">{p.name}</h3>
+                  <p class="text-xs text-[#8B949E] line-clamp-2 mb-5 flex-1 leading-relaxed">{p.description || 'Produk unggulan HMM Beauty & Health.'}</p>
+                  
+                  <div class="mb-5">
+                    <p class="text-xs text-gray-500 line-through mb-1">Rp {p.price.toLocaleString('id-ID')}</p>
+                    <p class="text-2xl font-black text-emerald-400">Rp {p.member_price.toLocaleString('id-ID')}</p>
+                    <p class="text-[10px] text-blue-400 font-bold mt-1 uppercase tracking-wider">Harga Khusus Member</p>
+                  </div>
+                  
+                  <a href="/login" class="w-full text-center bg-[#1A1E26] hover:bg-emerald-500 text-gray-300 hover:text-[#0B0E14] border border-[#2D3342] hover:border-emerald-500 font-bold py-3 rounded-xl transition-colors text-sm">
+                    Beli Sekarang
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      <footer class="border-t border-[#222731] py-8 text-center text-sm text-gray-500">
+      <footer class="border-t border-[#222731] py-8 text-center text-sm text-[#8B949E] font-medium bg-[#0B0E14]">
         &copy; {new Date().getFullYear()} HMM Beauty & Health. All rights reserved.
       </footer>
     </div>
