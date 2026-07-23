@@ -10,71 +10,100 @@ export default createRoute(async (c) => {
   try { profile = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  const user = await db.prepare("SELECT full_name, balance FROM users WHERE username = ?").bind(profile.sub).first()
+  // MENGGUNAKAN hu_id
+  const user = await db.prepare("SELECT id, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
+  if (!user) return c.redirect('/login')
+
+  const { results: withdrawals } = await db.prepare("SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all()
+  
   const errorMsg = c.req.query('error')
   const successMsg = c.req.query('success')
 
   return c.render(
-    <MemberLayout profile={profile} balance={(user?.balance as number) || 0} activeMenu="Buku Rekening">
-      <div class="flex justify-between items-center mb-8">
-        <div>
-          <h2 class="text-3xl font-bold text-white">Buku Rekening Payout</h2>
-          <p class="text-[#8B949E] text-sm mt-1">Kelola daftar rekening Bank dan E-Wallet Anda untuk keperluan pencairan dana komisi.</p>
-        </div>
-        <button class="px-4 py-2 border border-[#00E676] text-[#00E676] hover:bg-[#00E676]/10 rounded-lg text-sm font-bold transition-colors flex items-center">
-          + Tambah Rekening
-        </button>
+    <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Tarik Dana (Withdraw)">
+      <div class="mb-8">
+        <h2 class="text-3xl font-black text-white">Tarik Dana Bonus</h2>
+        <p class="text-[#8B949E] text-sm mt-1 font-medium">Cairkan saldo bonus Anda langsung ke rekening bank lokal yang terdaftar.</p>
       </div>
 
-      {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 text-sm font-bold rounded-lg mb-6">{errorMsg}</div>}
-      {successMsg && <div class="bg-[#00E676]/10 border border-[#00E676]/30 text-[#00E676] p-4 text-sm font-bold rounded-lg mb-6">{successMsg}</div>}
+      {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
+      {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
 
-      {/* Grid Rekening Bank (Visual dari Screenshot 15) */}
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div class="bg-[#151921] border border-[#222731] rounded-xl p-5 shadow-sm relative">
-          <div class="absolute top-4 right-4 text-[#8B949E] hover:text-red-400 cursor-pointer">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Form Penarikan */}
+        <div class="lg:col-span-1 bg-[#151921] border border-[#222731] rounded-2xl p-6 shadow-sm h-fit">
+          <div class="mb-6 pb-6 border-b border-[#222731]">
+            <p class="text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Saldo Tersedia</p>
+            <h3 class="text-3xl font-black text-emerald-400">Rp {((user.balance as number) || 0).toLocaleString('id-ID')}</h3>
           </div>
-          <div class="flex items-center mb-6">
-            <div class="p-2 bg-[#1B2A24] text-[#00E676] rounded-lg mr-3">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+          <form method="POST" action="/api/member/withdraw" class="space-y-4">
+            <div>
+              <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Nominal Penarikan (Rp)</label>
+              <input type="number" name="amount" required class="w-full bg-[#0B0E14] border border-[#2D3342] focus:border-emerald-500 text-white font-black rounded-xl px-4 py-3 focus:outline-none text-sm tracking-widest" placeholder="Min. 50000" />
             </div>
             <div>
-              <h4 class="font-bold text-white text-sm">BCA</h4>
-              <p class="text-[10px] text-[#8B949E] uppercase tracking-wider">BANK NASIONAL</p>
+              <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Nama Bank</label>
+              <input type="text" name="bank_name" required class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-xl px-4 py-3 focus:outline-none text-sm uppercase" placeholder="BCA / MANDIRI / BRI" />
             </div>
-          </div>
-          <p class="text-[10px] text-[#8B949E] uppercase tracking-wider mb-1">NOMOR REKENING</p>
-          <div class="bg-[#0B0E14] border border-[#222731] rounded-lg px-4 py-3 mb-4">
-             <span class="text-white font-bold tracking-widest">4310485174</span>
-          </div>
-          <p class="text-xs font-bold text-[#00E676] uppercase flex items-center">
-            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"></path></svg>
-            {user?.full_name}
-          </p>
+            <div>
+              <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Nomor Rekening</label>
+              <input type="text" name="account_number" required class="w-full bg-[#0B0E14] border border-[#2D3342] text-white font-mono rounded-xl px-4 py-3 focus:outline-none text-sm tracking-widest" placeholder="1234567890" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Atas Nama Rekening</label>
+              <input type="text" name="account_name" required class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-xl px-4 py-3 focus:outline-none text-sm uppercase" />
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl mt-4 transition-colors shadow-lg shadow-blue-600/20 uppercase tracking-widest text-xs">
+              Ajukan Penarikan
+            </button>
+          </form>
         </div>
-      </div>
 
-      <div class="bg-[#151921] border border-[#222731] rounded-xl overflow-hidden shadow-sm max-w-2xl">
-        <div class="bg-[#1A1E26] px-6 py-4 border-b border-[#222731]">
-          <h4 class="font-bold text-white text-sm">Form Penarikan Dana (Withdraw)</h4>
+        {/* Tabel Riwayat */}
+        <div class="lg:col-span-2 bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm">
+          <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731]">
+            <h4 class="font-black text-white text-sm uppercase tracking-widest">Riwayat Penarikan Dana</h4>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="text-[#8B949E] border-b border-[#222731] bg-[#0B0E14]">
+                <tr>
+                  <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Tanggal</th>
+                  <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Bank & Rekening</th>
+                  <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Nominal</th>
+                  <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#222731]">
+                {withdrawals.length === 0 ? (
+                  <tr><td colSpan={4} class="px-6 py-8 text-center text-[#8B949E] font-medium">Belum ada riwayat penarikan dana.</td></tr>
+                ) : withdrawals.map((w: any) => (
+                  <tr class="hover:bg-[#1A1E26] transition-colors">
+                    <td class="px-6 py-4 text-[#8B949E] font-mono text-xs">
+                      {new Date(w.created_at).toLocaleDateString('id-ID')}
+                    </td>
+                    <td class="px-6 py-4">
+                      <p class="font-bold text-white uppercase">{w.bank_name} - {w.account_number}</p>
+                      <p class="text-[10px] text-gray-500 uppercase mt-1">A.N: {w.account_name}</p>
+                    </td>
+                    <td class="px-6 py-4 font-black text-emerald-400">
+                      Rp {w.amount.toLocaleString('id-ID')}
+                    </td>
+                    <td class="px-6 py-4">
+                      <span class={`px-3 py-1.5 text-[10px] rounded border font-black uppercase tracking-widest 
+                        ${w.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                          w.status === 'rejected' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
+                          'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>
+                        {w.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <form method="POST" action="/api/member/withdraw" class="p-6 space-y-4">
-          <div>
-            <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Pilih Rekening Tujuan</label>
-            <select name="bankName" class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none">
-              <option value="BCA">BCA - 4310485174</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Nominal (Min Rp 50.000)</label>
-            <input type="number" name="amount" required min="50000" class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none" placeholder="Contoh: 100000" />
-            {/* Input Tersembunyi untuk melengkapi API tanpa interaksi Island */}
-            <input type="hidden" name="accountNumber" value="4310485174" />
-            <input type="hidden" name="accountName" value={user?.full_name} />
-          </div>
-          <button type="submit" class="w-full bg-[#00E676] hover:bg-[#00C853] text-[#0B0E14] font-bold py-3 rounded-lg mt-2 transition-colors">Ajukan Pencairan</button>
-        </form>
       </div>
     </MemberLayout>
   )
