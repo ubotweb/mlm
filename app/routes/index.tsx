@@ -88,7 +88,7 @@ export default createRoute(async (c) => {
         </div>
       </section>
 
-      {/* 4. Section Katalog Produk Terintegrasi (SSR Murni) */}
+      {/* 4. Section Katalog Produk Terintegrasi (SSR Murni + Native Modal) */}
       <section class="container mx-auto px-6 py-20">
         <h3 class="text-3xl font-black text-center mb-4">Katalog <span class="text-emerald-400">Produk</span></h3>
         <p class="text-center text-[#8B949E] mb-12 font-medium">Rangkaian produk premium untuk menunjang kesehatan dan kecantikan Anda.</p>
@@ -100,8 +100,10 @@ export default createRoute(async (c) => {
         ) : (
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {products.map((p: any) => (
-              <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm flex flex-col group hover:border-[#2D3342] transition-colors">
-                <div class="h-56 bg-[#1A1E26] relative overflow-hidden flex items-center justify-center">
+              <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm flex flex-col group hover:border-[#2D3342] transition-colors relative">
+                
+                {/* Visual Kartu Produk */}
+                <div class="h-56 bg-[#1A1E26] relative overflow-hidden flex items-center justify-center cursor-pointer" onclick={`document.getElementById('modal-${p.id}').showModal()`}>
                   {p.image_url ? (
                     <img src={p.image_url} alt={p.name} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   ) : (
@@ -122,10 +124,57 @@ export default createRoute(async (c) => {
                     <p class="text-[10px] text-blue-400 font-bold mt-1 uppercase tracking-wider">Harga Khusus Member</p>
                   </div>
                   
-                  <a href="/login" class="w-full text-center bg-[#1A1E26] hover:bg-emerald-500 text-gray-300 hover:text-[#0B0E14] border border-[#2D3342] hover:border-emerald-500 font-bold py-3 rounded-xl transition-colors text-sm">
-                    Beli Sekarang
-                  </a>
+                  {/* Tombol Pemicu Modal HTML5 */}
+                  <button onclick={`document.getElementById('modal-${p.id}').showModal()`} class="w-full text-center bg-[#1A1E26] hover:bg-emerald-500 text-gray-300 hover:text-[#0B0E14] border border-[#2D3342] hover:border-emerald-500 font-bold py-3 rounded-xl transition-colors text-sm">
+                    Lihat Detail
+                  </button>
                 </div>
+
+                {/* Elemen Modal Bawaan HTML5 (Native Dialog) */}
+                <dialog id={`modal-${p.id}`} class="bg-transparent m-auto p-0 w-[95vw] max-w-4xl backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
+                  <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative flex flex-col md:flex-row text-left">
+                    
+                    {/* Tombol Tutup */}
+                    <button onclick={`document.getElementById('modal-${p.id}').close()`} class="absolute top-4 right-4 bg-[#0B0E14] hover:bg-red-500 text-[#8B949E] hover:text-white border border-[#2D3342] hover:border-red-500 rounded-full w-10 h-10 flex items-center justify-center transition-colors z-20 font-bold">
+                      ✕
+                    </button>
+                    
+                    {/* Gambar Modal */}
+                    <div class="w-full md:w-2/5 h-64 md:h-auto bg-[#1A1E26] relative">
+                      {p.image_url ? (
+                        <img src={p.image_url} class="w-full h-full object-cover" />
+                      ) : (
+                        <div class="w-full h-full flex items-center justify-center"><svg class="w-20 h-20 text-[#2D3342]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg></div>
+                      )}
+                    </div>
+
+                    {/* Informasi Lengkap Produk */}
+                    <div class="w-full md:w-3/5 p-6 md:p-10 flex flex-col">
+                      <span class="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-3 bg-emerald-400/10 border border-emerald-400/20 px-3 py-1 rounded w-max">{p.category}</span>
+                      <h3 class="text-3xl font-black text-white mb-4 leading-tight">{p.name}</h3>
+                      <p class="text-[#8B949E] text-sm mb-8 leading-relaxed flex-1">{p.description || 'Produk premium HMM Beauty & Health.'}</p>
+                      
+                      <div class="grid grid-cols-2 gap-6 mb-8 bg-[#0B0E14] border border-[#222731] p-5 rounded-xl">
+                        <div>
+                          <p class="text-xs text-[#8B949E] uppercase font-bold tracking-wider mb-1">Harga Normal</p>
+                          <p class="text-sm text-gray-500 line-through">Rp {p.price.toLocaleString('id-ID')}</p>
+                          <p class="text-xs text-[#8B949E] uppercase font-bold tracking-wider mb-1 mt-4">Harga Member</p>
+                          <p class="text-2xl font-black text-emerald-400">Rp {p.member_price.toLocaleString('id-ID')}</p>
+                        </div>
+                        <div class="space-y-3 text-sm text-[#8B949E] border-l border-[#222731] pl-6">
+                          <p>Stok Tersedia: <br/><b class="text-white text-base">{p.stock} Pcs</b></p>
+                          <p>No. BPOM: <br/><b class="text-white text-xs">{p.bpom_number || 'Dalam Proses'}</b></p>
+                          <p>Sertifikasi Halal: <br/><b class="text-white text-xs">{p.halal_number || 'Dalam Proses'}</b></p>
+                        </div>
+                      </div>
+                      
+                      <a href="/login" class="w-full text-center bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-blue-600/20 uppercase tracking-widest text-sm">
+                        Beli & Gabung Kemitraan
+                      </a>
+                    </div>
+                  </div>
+                </dialog>
+
               </div>
             ))}
           </div>
