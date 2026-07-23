@@ -17,7 +17,7 @@ profileApi.use('*', async (c, next) => {
   }
 })
 
-// ENDPOINT: Update Pengaturan Profil (Nama, Nomor HP, Password)
+// ENDPOINT: Update Pengaturan Profil (Nama, Nomor HP, Alamat Wilayah, Password)
 profileApi.post('/update', async (c) => {
   const db = c.env.DB
   const payload = c.get('jwtPayload')
@@ -28,11 +28,18 @@ profileApi.post('/update', async (c) => {
     let phone = String(formData.get('phone') || '').trim()
     const newPassword = String(formData.get('newPassword') || '').trim()
 
+    // Menangkap Data Alamat & API Wilayah (KYC Lengkap)
+    const address = String(formData.get('address') || '').trim()
+    const province = String(formData.get('province') || '').trim()
+    const city = String(formData.get('city') || '').trim()
+    const district = String(formData.get('district') || '').trim()
+    const village = String(formData.get('village') || '').trim()
+
     // ==============================================================
     // MESIN STANDARISASI NOMOR WHATSAPP (Format Internasional: 62)
     // ==============================================================
     if (phone) {
-      // 1. Bersihkan semua karakter selain angka (menghapus +, spasi, strip, dll)
+      // 1. Bersihkan semua karakter selain angka
       phone = phone.replace(/\D/g, '')
       
       // 2. Jika nomor dimulai dengan angka 0, ubah menjadi 62
@@ -45,11 +52,13 @@ profileApi.post('/update', async (c) => {
     const user = await db.prepare("SELECT id FROM users WHERE hu_id = ?").bind(payload.sub).first()
     if (!user) throw new Error("Akses Ditolak: Hak Usaha tidak ditemukan.")
 
-    // PROSES 1: Update Nama & Nomor HP (KYC)
-    // Walaupun formnya terpisah, kita menangkap nilai yang di-passing melalui <input type="hidden">
-    if (fullName || phone) {
-       await db.prepare("UPDATE users SET full_name = ?, phone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-         .bind(fullName, phone, user.id).run()
+    // PROSES 1: Update Nama, Nomor HP, dan Data Wilayah Lengkap (KYC)
+    if (fullName || phone || address || province) {
+       await db.prepare(`
+         UPDATE users 
+         SET full_name = ?, phone = ?, address = ?, province = ?, city = ?, district = ?, village = ?, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = ?
+       `).bind(fullName, phone, address, province, city, district, village, user.id).run()
     }
 
     // PROSES 2: Update Password (Hanya dieksekusi jika form password diisi)
@@ -58,7 +67,6 @@ profileApi.post('/update', async (c) => {
          throw new Error("Password baru minimal harus terdiri dari 6 karakter.")
        }
 
-       // Hash password baru ke format SHA-256 agar sepadan dengan sistem login
        const encoder = new TextEncoder()
        const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(newPassword))
        const hashedPassword = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
@@ -67,11 +75,9 @@ profileApi.post('/update', async (c) => {
          .bind(hashedPassword, user.id).run()
     }
 
-    // Redirect kembali ke halaman Profil dengan parameter sukses
     return c.redirect('/member/profil?success=Profil+dan+pengaturan+keamanan+berhasil+diperbarui!')
     
   } catch (err: any) {
-    // Redirect kembali ke halaman Profil dengan peringatan error
     return c.redirect(`/member/profil?error=${encodeURIComponent(err.message)}`)
   }
 })
