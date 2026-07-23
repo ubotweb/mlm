@@ -10,14 +10,19 @@ export default createRoute(async (c) => {
   try { profile = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  // PERBAIKAN: Mengubah pencarian dari username menjadi hu_id
-  const user = await db.prepare("SELECT full_name, email, phone, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
+  
+  // PERBAIKAN: Menambahkan kolom address, province, city, district, dan village
+  const user = await db.prepare("SELECT full_name, email, phone, balance, address, province, city, district, village FROM users WHERE hu_id = ?").bind(profile.sub).first()
   
   const successMsg = c.req.query('success')
   const errorMsg = c.req.query('error')
 
   return c.render(
     <MemberLayout profile={profile} balance={(user?.balance as number) || 0} activeMenu="Profil Saya">
+      
+      {/* INJEKSI ALPINE.JS UNTUK DROPDOWN WILAYAH */}
+      <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
       <div class="max-w-3xl">
         <h3 class="text-2xl font-bold text-white">Profil & Pengaturan</h3>
         <p class="text-[#8B949E] text-sm mt-1 mb-8">Kelola informasi akun, kontak, dan parameter keamanan sistem Anda.</p>
@@ -41,7 +46,7 @@ export default createRoute(async (c) => {
             </div>
           </div>
 
-          {/* Card 2: KYC (Yellow Submit) */}
+          {/* Card 2: KYC & Alamat (Yellow Submit) Terintegrasi dengan Alpine.js */}
           <form method="POST" action="/api/member/settings/update" class="bg-[#151921] border border-[#222731] rounded-xl overflow-hidden shadow-sm">
             <div class="px-6 py-5 border-b border-[#222731] flex items-center">
               <div class="p-2 bg-[#332A1C] text-yellow-500 rounded-full mr-4">
@@ -49,31 +54,111 @@ export default createRoute(async (c) => {
               </div>
               <div>
                 <h4 class="font-bold text-white text-sm">Informasi Kontak & Wilayah (KYC)</h4>
-                <p class="text-[11px] text-[#8B949E] mt-1">Data ini wajib dilengkapi untuk kelancaran verifikasi pencairan dana (Withdrawal).</p>
+                <p class="text-[11px] text-[#8B949E] mt-1">Data ini wajib dilengkapi untuk kelancaran verifikasi pencairan dana dan pengiriman produk.</p>
               </div>
             </div>
+            
             <div class="p-6 space-y-5">
               <input type="hidden" name="fullName" value={(user?.full_name as string) || ''} />
+              
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Nomor Whatsapp Aktif</label>
-                <input type="text" name="phone" defaultValue={(user?.phone as string) || ''} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none" />
+                <input type="text" name="phone" defaultValue={(user?.phone as string) || ''} placeholder="Contoh: 08123456789" class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500" />
               </div>
+              
               <div>
                 <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Alamat Lengkap (Jalan, RT/RW, Patokan)</label>
-                <input type="text" defaultValue="" class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none" />
+                <textarea name="address" rows={2} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500 resize-none">{user?.address || ''}</textarea>
               </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {/* BLOK ALPINE.JS UNTUK PENGAMBILAN DATA API WILAYAH */}
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4" {...{"x-data": `{
+                baseUrl: 'https://assets.pasblast.com/wilayah',
+                provinces: [], regencies: [], districts: [], villages: [],
+                provId: '', regId: '', distId: '', villId: '',
+                provName: '${user?.province || ''}', 
+                cityName: '${user?.city || ''}', 
+                distName: '${user?.district || ''}', 
+                villName: '${user?.village || ''}',
+
+                init() {
+                  fetch(this.baseUrl + '/provinces.json').then(r => r.json()).then(d => this.provinces = d).catch(e => console.error('Gagal memuat provinsi'));
+                },
+                fetchRegencies() {
+                  this.provName = this.provinces.find(p => p.id === this.provId)?.name || '';
+                  this.regencies = []; this.districts = []; this.villages = [];
+                  this.regId = ''; this.distId = ''; this.villId = '';
+                  this.cityName = ''; this.distName = ''; this.villName = '';
+                  if(this.provId) fetch(this.baseUrl + '/regencies/' + this.provId + '.json').then(r => r.json()).then(d => this.regencies = d);
+                },
+                fetchDistricts() {
+                  this.cityName = this.regencies.find(r => r.id === this.regId)?.name || '';
+                  this.districts = []; this.villages = [];
+                  this.distId = ''; this.villId = '';
+                  this.distName = ''; this.villName = '';
+                  if(this.regId) fetch(this.baseUrl + '/districts/' + this.regId + '.json').then(r => r.json()).then(d => this.districts = d);
+                },
+                fetchVillages() {
+                  this.distName = this.districts.find(d => d.id === this.distId)?.name || '';
+                  this.villages = []; this.villId = ''; this.villName = '';
+                  if(this.distId) fetch(this.baseUrl + '/villages/' + this.distId + '.json').then(r => r.json()).then(d => this.villages = d);
+                },
+                setVillage() {
+                  this.villName = this.villages.find(v => v.id === this.villId)?.name || '';
+                }
+              }`}}>
+                
+                {/* Input tersembunyi agar nama teks dikirim, bukan ID angka */}
+                <input type="hidden" name="province" {...{"x-bind:value": "provName"}} />
+                <input type="hidden" name="city" {...{"x-bind:value": "cityName"}} />
+                <input type="hidden" name="district" {...{"x-bind:value": "distName"}} />
+                <input type="hidden" name="village" {...{"x-bind:value": "villName"}} />
+
                 <div>
-                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Provinsi</label>
-                  <select class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none"><option>-- Pilih Provinsi Baru --</option></select>
+                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Provinsi <span class="text-gray-500 lowercase font-normal">(Saat ini: {user?.province || 'Belum diatur'})</span></label>
+                  <select {...{"x-model": "provId", "@change": "fetchRegencies()"}} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500 text-sm cursor-pointer">
+                    <option value="">-- Pilih Provinsi Baru --</option>
+                    <template {...{"x-for": "p in provinces", ":key": "p.id"}}>
+                      <option {...{":value": "p.id", "x-text": "p.name"}}></option>
+                    </template>
+                  </select>
                 </div>
+                
                 <div>
-                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Kabupaten / Kota</label>
-                  <select class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none"><option>-- Pilih Kabupaten/Kota --</option></select>
+                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Kabupaten / Kota <span class="text-gray-500 lowercase font-normal">(Saat ini: {user?.city || '-'})</span></label>
+                  <select {...{"x-model": "regId", "@change": "fetchDistricts()", ":disabled": "regencies.length === 0"}} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500 text-sm cursor-pointer disabled:opacity-50">
+                    <option value="">-- Pilih Kabupaten/Kota --</option>
+                    <template {...{"x-for": "r in regencies", ":key": "r.id"}}>
+                      <option {...{":value": "r.id", "x-text": "r.name"}}></option>
+                    </template>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Kecamatan <span class="text-gray-500 lowercase font-normal">(Saat ini: {user?.district || '-'})</span></label>
+                  <select {...{"x-model": "distId", "@change": "fetchVillages()", ":disabled": "districts.length === 0"}} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500 text-sm cursor-pointer disabled:opacity-50">
+                    <option value="">-- Pilih Kecamatan --</option>
+                    <template {...{"x-for": "d in districts", ":key": "d.id"}}>
+                      <option {...{":value": "d.id", "x-text": "d.name"}}></option>
+                    </template>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Desa / Kelurahan <span class="text-gray-500 lowercase font-normal">(Saat ini: {user?.village || '-'})</span></label>
+                  <select {...{"x-model": "villId", "@change": "setVillage()", ":disabled": "villages.length === 0"}} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500 text-sm cursor-pointer disabled:opacity-50">
+                    <option value="">-- Pilih Desa/Kelurahan --</option>
+                    <template {...{"x-for": "v in villages", ":key": "v.id"}}>
+                      <option {...{":value": "v.id", "x-text": "v.name"}}></option>
+                    </template>
+                  </select>
                 </div>
               </div>
+
               <div class="pt-2">
-                <button type="submit" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded-lg transition-colors text-sm">SIMPAN INFORMASI KONTAK</button>
+                <button type="submit" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-black py-4 rounded-xl transition-colors text-xs uppercase tracking-widest shadow-lg shadow-yellow-600/20">
+                  SIMPAN INFORMASI KONTAK & WILAYAH
+                </button>
               </div>
             </div>
           </form>
