@@ -16,15 +16,16 @@ memberPinApi.use('*', async (c, next) => {
 
 // MESIN 1: BUAT ORDER PEMBELIAN PAKET (GENERATE INVOICE & SNAP MIDTRANS)
 memberPinApi.post('/buy', async (c) => {
-  let redirectUrl = '/member/pin' // Default aman di luar try
+  let redirectUrl = '/member/pin' 
 
   try {
-    const formData = await c.req.formData()
-    redirectUrl = String(formData.get('redirect_url') || '/member/pin')
+    // Membaca form dengan aman
+    const body = await c.req.parseBody()
+    if (body['redirect_url']) redirectUrl = String(body['redirect_url'])
 
     const db = c.env.DB
     const payload = c.get('jwtPayload')
-    const packageId = String(formData.get('package_id'))
+    const packageId = String(body['package_id'])
 
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
     if (!pkg) throw new Error("Paket tidak ditemukan")
@@ -96,42 +97,41 @@ memberPinApi.post('/buy', async (c) => {
     }
 
   } catch (err: any) {
-    // Menangkap segala error agar tidak memicu 1101 Cloudflare
-    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message || 'Terjadi kesalahan sistem')}`)
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message || 'Terjadi kesalahan sistem saat menghubungi Midtrans.')}`)
   }
 })
 
-// MESIN 2: AKTIVASI PIN KE JARINGAN
+// MESIN 2: AKTIVASI PIN KE JARINGAN (SUPER KILAT & BEBAS CRASH 1101)
 memberPinApi.post('/activate', async (c) => {
-  let redirectUrl = '/member/pin' // Default aman di luar try
+  let redirectUrl = '/member/pin' 
   
   try {
-    const formData = await c.req.formData()
-    redirectUrl = String(formData.get('redirect_url') || '/member/pin')
+    // Membaca form dengan parseBody() agar kebal dari kesalahan enctype browser
+    const body = await c.req.parseBody()
+    if (body['redirect_url']) redirectUrl = String(body['redirect_url'])
     
     const db = c.env.DB
     const payload = c.get('jwtPayload')
     
-    const pinCode = String(formData.get('pin_code'))
-    const newName = String(formData.get('new_full_name'))
-    const newPassword = String(formData.get('new_password'))
-    const targetUplineHu = String(formData.get('upline_hu_id')).trim()
-    const position = String(formData.get('position')).toLowerCase()
+    const pinCode = String(body['pin_code'])
+    const newName = String(body['new_full_name'])
+    const newPassword = String(body['new_password'])
+    const targetUplineHu = String(body['upline_hu_id']).trim()
+    const position = String(body['position']).toLowerCase()
 
     const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
     if (!user) throw new Error("Sesi pengguna tidak valid.")
     
-    // 1. Validasi Kepemilikan PIN (Sesuai Skema DB newmlmku.sql)
+    // 1. Validasi PIN
     const pin = await db.prepare(`
       SELECT p.id, p.package_id, pk.pv, pk.price, pk.sponsor_levels 
       FROM activation_pins p
       JOIN packages pk ON p.package_id = pk.id
       WHERE UPPER(p.pin_code) = UPPER(?) AND p.owner_id = ? AND p.status = 'active'
     `).bind(pinCode, user.id).first()
-    
     if (!pin) throw new Error("PIN tidak valid, sudah terpakai, atau bukan milik Anda.")
 
-    // 2. Validasi Upline Target (Upper Case SQL agar kebal dari bug 'admin')
+    // 2. Validasi Upline Target
     const upline = await db.prepare("SELECT id, hu_id FROM users WHERE UPPER(hu_id) = UPPER(?)").bind(targetUplineHu).first()
     if (!upline) throw new Error("ID Upline (Penempatan) tidak ditemukan.")
 
@@ -139,17 +139,26 @@ memberPinApi.post('/activate', async (c) => {
     const checkLeg = await db.prepare("SELECT id FROM users WHERE upline_id = ? AND network_position = ?").bind(upline.id, position).first()
     if (checkLeg) throw new Error(`Kaki ${position.toUpperCase()} pada Upline tersebut sudah terisi.`)
 
-    // 4. Validasi Anti Cross-Line (DIBERI SEKERING PENGAMAN 1000 LOOP AGAR WORKER TIDAK CRASH 1101)
-    let currentId = upline.id
-    let isDownline = false
-    let crosslineSafetyCounter = 0 
-    while(currentId && crosslineSafetyCounter < 1000) {
-      crosslineSafetyCounter++
-      if (currentId === user.id) { isDownline = true; break; }
-      const parent = await db.prepare("SELECT upline_id FROM users WHERE id = ?").bind(currentId).first()
-      if (parent && parent.upline_id) { currentId = parent.upline_id } else { break; }
+    // =========================================================================================
+    // 4. VALIDASI ANTI CROSS-LINE (MENGGUNAKAN 1 KUERI CTE - BEBAS LOOPING / CRASH)
+    // =========================================================================================
+    if (upline.id !== user.id) {
+      const crosslineCheck = await db.prepare(`
+        WITH RECURSIVE
+          upline_tree(id, parent_id) AS (
+            SELECT id, upline_id FROM users WHERE id = ?
+            UNION ALL
+            SELECT p.id, p.upline_id
+            FROM users p
+            JOIN upline_tree c ON p.id = c.parent_id
+          )
+        SELECT id FROM upline_tree WHERE id = ? LIMIT 1
+      `).bind(upline.id, user.id).first()
+      
+      if (!crosslineCheck) {
+        throw new Error("Pelanggaran Cross-Line! Anda hanya bisa meletakkan HU baru di bawah jaringan Anda sendiri.")
+      }
     }
-    if (!isDownline && upline.id !== user.id) throw new Error("Pelanggaran Cross-Line! Anda hanya bisa meletakkan HU baru di bawah jaringan Anda sendiri.")
 
     // 5. Generate HMMxxxxxxxx Baru
     const lastUser = await db.prepare("SELECT hu_id FROM users WHERE hu_id LIKE 'HMM%' ORDER BY CAST(SUBSTR(hu_id, 4) AS INTEGER) DESC LIMIT 1").first()
@@ -166,7 +175,7 @@ memberPinApi.post('/activate', async (c) => {
 
     const statements = []
 
-    // 6. Eksekusi Aktivasi Otomatis (Sesuai kolom tabel users newmlmku.sql)
+    // 6. Eksekusi Aktivasi Otomatis
     statements.push(
       db.prepare(`
         INSERT INTO users (id, hu_id, password_hash, role, full_name, package_id, sponsor_id, upline_id, network_position, status, created_at, updated_at)
@@ -178,35 +187,54 @@ memberPinApi.post('/activate', async (c) => {
       db.prepare(`UPDATE activation_pins SET status = 'used', used_by_id = ?, used_at = DATETIME('now', '+7 hours') WHERE id = ?`).bind(newUserId, pin.id)
     )
 
-    // 7. MESIN INJEKSI PV BINARY (DIBERI SEKERING 1000 LOOP AGAR TIDAK CRASH 1101)
-    let currentUp = upline.id as string
-    let currentPos = position
-    let safetyCounter = 0
-    let treeQueries = []
-    
-    while (currentUp && safetyCounter < 1000) {
-      if (currentPos === 'left' || currentPos === 'kiri') {
-        treeQueries.push(db.prepare("UPDATE users SET pv_left_today = pv_left_today + ?, reward_pv_left = reward_pv_left + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUp))
-      } else {
-        treeQueries.push(db.prepare("UPDATE users SET pv_right_today = pv_right_today + ?, reward_pv_right = reward_pv_right + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUp))
+    // =========================================================================================
+    // 7. MESIN INJEKSI PV BINARY (MENGGUNAKAN 1 KUERI CTE - BEBAS LOOPING / CRASH)
+    // =========================================================================================
+    const { results: pvPath } = await db.prepare(`
+      WITH RECURSIVE
+        ancestors(id, parent_id, node_pos, apply_pos) AS (
+          SELECT id, upline_id, network_position, CAST(? AS TEXT) 
+          FROM users WHERE id = ?
+          UNION ALL
+          SELECT p.id, p.upline_id, p.network_position, c.node_pos
+          FROM users p
+          JOIN ancestors c ON p.id = c.parent_id
+        )
+      SELECT id, apply_pos FROM ancestors
+    `).bind(position, upline.id).all()
+
+    for (const node of pvPath) {
+      if (node.apply_pos === 'left' || node.apply_pos === 'kiri') {
+        statements.push(db.prepare("UPDATE users SET pv_left_today = pv_left_today + ?, reward_pv_left = reward_pv_left + ? WHERE id = ?").bind(pin.pv, pin.pv, node.id))
+      } else if (node.apply_pos === 'right' || node.apply_pos === 'kanan') {
+        statements.push(db.prepare("UPDATE users SET pv_right_today = pv_right_today + ?, reward_pv_right = reward_pv_right + ? WHERE id = ?").bind(pin.pv, pin.pv, node.id))
       }
-      const parent = await db.prepare("SELECT upline_id, network_position FROM users WHERE id = ?").bind(currentUp).first()
-      if (!parent || !parent.upline_id) break
-      currentUp = parent.upline_id as string
-      currentPos = parent.network_position as string
-      safetyCounter++
     }
-    statements.push(...treeQueries)
 
-    // 8. MESIN BONUS SPONSOR MULTI-GENERASI (JSON)
+    // =========================================================================================
+    // 8. MESIN BONUS SPONSOR MULTI-GENERASI (MENGGUNAKAN 1 KUERI CTE - BEBAS LOOPING / CRASH)
+    // =========================================================================================
     let sponsorLevelsPct: number[] = []
-    try { sponsorLevelsPct = JSON.parse(String(pin.sponsor_levels)) } 
-    catch { sponsorLevelsPct = [10] }
+    try { sponsorLevelsPct = JSON.parse(String(pin.sponsor_levels)) } catch { sponsorLevelsPct = [10] }
 
-    let currentSponsorId = user.id as string
-    for (let i = 0; i < sponsorLevelsPct.length; i++) {
-      if (!currentSponsorId) break
-      const percentage = Number(sponsorLevelsPct[i])
+    const { results: sponsorPath } = await db.prepare(`
+      WITH RECURSIVE
+        sponsor_tree(id, sponsor_id, depth) AS (
+          SELECT id, sponsor_id, 0 as depth FROM users WHERE id = ?
+          UNION ALL
+          SELECT p.id, p.sponsor_id, c.depth + 1
+          FROM users p
+          JOIN sponsor_tree c ON p.id = c.sponsor_id
+          WHERE c.depth < ?
+        )
+      SELECT id, depth FROM sponsor_tree ORDER BY depth ASC
+    `).bind(user.id, sponsorLevelsPct.length).all()
+
+    for (const sp of sponsorPath) {
+      const depth = Number(sp.depth)
+      if (depth >= sponsorLevelsPct.length) continue // Safety check
+      
+      const percentage = Number(sponsorLevelsPct[depth])
       const bonusAmount = (Number(pin.price) * percentage) / 100
 
       if (bonusAmount > 0) {
@@ -215,21 +243,19 @@ memberPinApi.post('/activate', async (c) => {
           db.prepare(`
             INSERT INTO commissions (id, user_id, source_user_id, type, amount, description, created_at) 
             VALUES (?, ?, ?, 'sponsor', ?, ?, DATETIME('now', '+7 hours'))
-          `).bind(commId, currentSponsorId, newUserId, bonusAmount, `Bonus Sponsor Level ${i+1} dari Aktivasi ${newHuId} (${percentage}%)`)
+          `).bind(commId, sp.id, newUserId, bonusAmount, `Bonus Sponsor Level ${depth+1} dari Aktivasi ${newHuId} (${percentage}%)`)
         )
-        statements.push(db.prepare("UPDATE users SET balance = balance + ?, updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(bonusAmount, currentSponsorId))
+        statements.push(db.prepare("UPDATE users SET balance = balance + ?, updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(bonusAmount, sp.id))
       }
-      const nextSponsor = await db.prepare("SELECT sponsor_id FROM users WHERE id = ?").bind(currentSponsorId).first()
-      if (!nextSponsor || !nextSponsor.sponsor_id) break
-      currentSponsorId = nextSponsor.sponsor_id as string
     }
 
+    // 9. Eksekusi semua perintah modifikasi ke Database sekaligus (Atomic)
     await db.batch(statements)
 
-    // Kembali ke halaman asal dengan mulus
+    // Pengalihan Berhasil: Kembali secara fisik ke halaman antarmuka Anda
     return c.redirect(`${redirectUrl}?success=Aktivasi+Sukses!+Mitra+Baru+Telah+Lahir:+${newHuId}`)
   } catch (err: any) {
-    // Memastikan segala error ditangkap dengan aman tanpa crash Cloudflare Worker
+    // Pengalihan Gagal: Cegah layar putih 1101, lempar kembali ke halaman asal dengan pesan error
     return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message || 'Terjadi kesalahan sistem saat memproses aktivasi.')}`)
   }
 })
