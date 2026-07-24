@@ -171,8 +171,8 @@ export default createRoute(async (c) => {
             <button onclick="document.getElementById('activationModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center">✕</button>
           </div>
           
-          {/* PERBAIKAN: Menambahkan enctype agar Hono bisa mem-parsing form dengan aman */}
-          <form method="POST" action="/api/member-pin/activate" enctype="multipart/form-data" class="p-6 space-y-4">
+          {/* PERBAIKAN: Menyesuaikan endpoint ke /api/member/pin/activate */}
+          <form method="POST" action="/api/member/pin/activate" enctype="multipart/form-data" class="p-6 space-y-4">
             <input type="hidden" name="upline_hu_id" id="modal-upline" value="" />
             <input type="hidden" name="position" id="modal-position" value="" />
             <input type="hidden" name="redirect_url" value="/member/jaringan" />
