@@ -14,10 +14,8 @@ export default createRoute(async (c) => {
     const user = await db.prepare("SELECT id, hu_id, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
     if (!user) return c.redirect('/login')
 
-    // PERBAIKAN: Mengambil kolom 'price' (karena registration_fee sudah tidak ada di newmlmku)
     const { results: packages } = await db.prepare("SELECT id, name, price FROM packages WHERE is_active = 1 ORDER BY price ASC").all()
 
-    // PERBAIKAN: Menggunakan kolom 'owner_id' dan 'status' sesuai tabel activation_pins baru
     const { results: pins } = await db.prepare(`
       SELECT p.pin_code, p.status, p.created_at, p.used_at, pk.name as package_name, u.hu_id as used_by
       FROM activation_pins p
@@ -111,8 +109,10 @@ export default createRoute(async (c) => {
               <h4 class="font-black text-white text-sm uppercase tracking-widest text-blue-400">Beli PIN Aktivasi</h4>
               <button onclick="document.getElementById('buyPinModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
             </div>
-            <form method="POST" action="/api/member/pin/buy" class="p-6 space-y-4">
-              
+            <form method="POST" action="/api/member-pin/buy" class="p-6 space-y-4">
+              {/* PERBAIKAN: Kembalikan Anda ke halaman Brankas PIN setelah beli */}
+              <input type="hidden" name="redirect_url" value="/member/pin" />
+
               <div class="bg-blue-500/10 border border-blue-500/30 text-blue-400 p-4 rounded-xl text-xs font-medium leading-relaxed mb-2">
                 Pembelian PIN akan diproses melalui <b class="text-white">Midtrans Payment Gateway</b>. Pastikan data akun Anda valid.
               </div>
@@ -142,7 +142,10 @@ export default createRoute(async (c) => {
               <button onclick="document.getElementById('activateModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
             </div>
             
-            <form method="POST" action="/api/member/pin/activate" class="p-6">
+            <form method="POST" action="/api/member-pin/activate" class="p-6">
+              {/* PERBAIKAN: Kembalikan Anda ke halaman Brankas PIN setelah aktivasi */}
+              <input type="hidden" name="redirect_url" value="/member/pin" />
+
               {activePins.length === 0 ? (
                 <div class="bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 p-6 rounded-xl text-sm font-bold text-center leading-relaxed">
                   Anda tidak memiliki PIN aktif di Brankas.<br/>Silakan Beli PIN terlebih dahulu untuk mendaftarkan member.
