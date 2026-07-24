@@ -13,16 +13,19 @@ export default createRoute(async (c) => {
   const user = await db.prepare("SELECT id, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
   if (!user) return c.redirect('/login')
 
-  // Query disesuaikan mutlak dengan skema Database baru (WIB & PV)
+  // [DIUBAH]: Query disesuaikan dengan skema tabel orders yang baru (order_type, total_amount, payment_reference)
   const { results: orders } = await db.prepare(`
-    SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC
+    SELECT payment_reference as invoice_number, order_type, total_amount, total_pv, status, created_at 
+    FROM orders 
+    WHERE user_id = ? 
+    ORDER BY created_at DESC
   `).bind(user.id).all()
 
   return c.render(
-    <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Riwayat Transaksi">
+    <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Riwayat Order">
       <div class="mb-8">
-        <h2 class="text-3xl font-black text-white">Riwayat Transaksi & Order</h2>
-        <p class="text-[#8B949E] text-sm mt-1 font-medium">Pantau status pembelian PIN, produk, dan transaksi jaringan Anda.</p>
+        <h2 class="text-3xl font-black text-white">Riwayat Transaksi</h2>
+        <p class="text-[#8B949E] text-sm mt-1 font-medium">Pantau status pembelian PIN aktivasi dan produk Anda.</p>
       </div>
 
       <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm">
@@ -30,12 +33,12 @@ export default createRoute(async (c) => {
           <table class="w-full text-left text-sm">
             <thead class="text-[#8B949E] border-b border-[#222731] bg-[#1A1E26]">
               <tr>
-                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">No. Referensi</th>
-                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Jenis Transaksi</th>
+                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">No. Invoice</th>
+                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Tipe Transaksi</th>
                 <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Total Bayar</th>
                 <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Total PV</th>
                 <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Status</th>
-                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Tanggal (WIB)</th>
+                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Waktu (WIB)</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-[#222731]">
@@ -43,14 +46,14 @@ export default createRoute(async (c) => {
                 <tr><td colSpan={6} class="px-6 py-10 text-center text-[#8B949E] font-bold">Belum ada riwayat transaksi.</td></tr>
               ) : orders.map((o: any) => (
                 <tr class="hover:bg-[#1A1E26] transition-colors">
-                  <td class="px-6 py-4 font-mono text-emerald-400 font-bold">{o.payment_reference || o.id.split('_')[1]}</td>
-                  <td class="px-6 py-4 font-bold text-white uppercase text-xs tracking-wider">
+                  <td class="px-6 py-4 font-mono text-emerald-400 font-bold">{o.invoice_number}</td>
+                  <td class="px-6 py-4 font-bold text-white uppercase text-xs">
                     {o.order_type === 'buy_pin' ? 'Beli PIN Aktivasi' : o.order_type}
                   </td>
                   <td class="px-6 py-4 font-black text-white">Rp {Number(o.total_amount).toLocaleString('id-ID')}</td>
                   <td class="px-6 py-4 font-bold text-blue-400">{o.total_pv} PV</td>
                   <td class="px-6 py-4">
-                    <span class={`inline-block px-2.5 py-1 text-[10px] rounded border font-black uppercase tracking-widest ${o.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : o.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                    <span class={`inline-block px-2.5 py-1 text-[10px] rounded border font-black uppercase tracking-widest ${o.status === 'completed' || o.status === 'paid' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : o.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
                       {o.status}
                     </span>
                   </td>
