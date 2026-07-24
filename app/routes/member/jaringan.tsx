@@ -68,7 +68,6 @@ export default createRoute(async (c) => {
       {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
       {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
 
-      {/* PANEL STATISTIK PV */}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div class="bg-[#151921] border border-[#222731] p-5 rounded-2xl flex justify-between items-center shadow-sm">
             <div>
@@ -94,7 +93,6 @@ export default createRoute(async (c) => {
 
       <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm p-8 flex flex-col items-center">
         
-        {/* Node Utama (View Root) */}
         <div class="flex flex-col items-center mb-10 relative z-10">
           <div class="w-16 h-16 bg-blue-600 rounded-full border-4 border-[#0B0E14] shadow-lg shadow-blue-600/30 flex items-center justify-center mb-3">
              <span class="font-black text-white text-xl">{String(viewNode.full_name).charAt(0).toUpperCase()}</span>
@@ -108,13 +106,10 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* Garis Konektor */}
         <div class="w-full max-w-md h-10 border-t-2 border-x-2 border-[#2D3342] rounded-t-xl mb-4 -mt-14 relative z-0"></div>
 
-        {/* Node Kiri dan Kanan */}
         <div class="w-full max-w-2xl flex justify-between px-4 md:px-10">
           
-          {/* KIRI */}
           <div class="flex flex-col items-center w-1/2">
             {leftNode ? (
               <a href={`?view=${leftNode.hu_id}`} class="flex flex-col items-center group cursor-pointer">
@@ -139,7 +134,6 @@ export default createRoute(async (c) => {
             )}
           </div>
 
-          {/* KANAN */}
           <div class="flex flex-col items-center w-1/2">
             {rightNode ? (
               <a href={`?view=${rightNode.hu_id}`} class="flex flex-col items-center group cursor-pointer">
@@ -177,10 +171,10 @@ export default createRoute(async (c) => {
             <button onclick="document.getElementById('activationModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center">✕</button>
           </div>
           
-          <form method="POST" action="/api/member-pin/activate" class="p-6 space-y-4">
+          {/* PERBAIKAN: Menambahkan enctype agar Hono bisa mem-parsing form dengan aman */}
+          <form method="POST" action="/api/member-pin/activate" enctype="multipart/form-data" class="p-6 space-y-4">
             <input type="hidden" name="upline_hu_id" id="modal-upline" value="" />
             <input type="hidden" name="position" id="modal-position" value="" />
-            {/* PERBAIKAN: Melempar Anda kembali ke halaman Jaringan setelah submit */}
             <input type="hidden" name="redirect_url" value="/member/jaringan" />
             
             <div>
