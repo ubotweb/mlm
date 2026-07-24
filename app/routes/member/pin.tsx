@@ -109,8 +109,8 @@ export default createRoute(async (c) => {
               <h4 class="font-black text-white text-sm uppercase tracking-widest text-blue-400">Beli PIN Aktivasi</h4>
               <button onclick="document.getElementById('buyPinModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
             </div>
-            {/* PERBAIKAN: Menambahkan enctype agar Hono bisa memproses form tanpa crash */}
-            <form method="POST" action="/api/member-pin/buy" enctype="multipart/form-data" class="p-6 space-y-4">
+            {/* PERBAIKAN: Menyesuaikan endpoint ke /api/member/pin/buy */}
+            <form method="POST" action="/api/member/pin/buy" enctype="multipart/form-data" class="p-6 space-y-4">
               <input type="hidden" name="redirect_url" value="/member/pin" />
 
               <div class="bg-blue-500/10 border border-blue-500/30 text-blue-400 p-4 rounded-xl text-xs font-medium leading-relaxed mb-2">
@@ -142,8 +142,8 @@ export default createRoute(async (c) => {
               <button onclick="document.getElementById('activateModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
             </div>
             
-            {/* PERBAIKAN: Menambahkan enctype dan memperbaiki value redirect_url ke /member/pin */}
-            <form method="POST" action="/api/member-pin/activate" enctype="multipart/form-data" class="p-6">
+            {/* PERBAIKAN: Menyesuaikan endpoint ke /api/member/pin/activate */}
+            <form method="POST" action="/api/member/pin/activate" enctype="multipart/form-data" class="p-6">
               <input type="hidden" name="redirect_url" value="/member/pin" />
 
               {activePins.length === 0 ? (
