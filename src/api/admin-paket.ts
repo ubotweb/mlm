@@ -2,96 +2,119 @@ import { Hono } from 'hono'
 import { verify } from 'hono/jwt'
 import { getCookie } from 'hono/cookie'
 
-const adminPaketApi = new Hono<{ Bindings: Env }>()
+const adminPaketApi = new Hono<{ Bindings: Env; Variables: { jwtPayload: any } }>()
 
-adminPaketApi.use('*', async (c, next) => {
+// Middleware proteksi Admin
+adminPaketApi.use('/*', async (c, next) => {
   const token = getCookie(c, 'auth_token')
-  if (!token) return c.redirect('/login')
+  if (!token) return c.redirect('/loginadmin')
   try {
-    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256')
+    const decoded: any = await verify(token, c.env.JWT_SECRET, 'HS256')
     if (decoded.role !== 'admin') return c.redirect('/member')
-  } catch (err) { 
-    return c.redirect('/login') 
-  }
-  await next()
-})
-
-// CREATE PAKET BARU
-adminPaketApi.post('/', async (c) => {
-  try {
-    const db = c.env.DB
-    const formData = await c.req.formData()
-    
-    await db.prepare(`
-      INSERT INTO packages (id, name, registration_fee, discount_percentage, sponsor_bonus_amount, hu_count, product_count, network_bonus_eligible, leadership_bonus_eligible)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      String(formData.get('id')),
-      String(formData.get('name')),
-      Number(formData.get('registration_fee')) || 0,
-      Number(formData.get('discount_percentage')) || 0,
-      Number(formData.get('sponsor_bonus_amount')) || 0,
-      Number(formData.get('hu_count')) || 1,
-      Number(formData.get('product_count')) || 1,
-      formData.get('network_bonus_eligible') ? 1 : 0,
-      0
-    ).run()
-
-    return c.redirect('/admin/paket?success=Paket+Kemitraan+berhasil+ditambahkan')
-  } catch (err: any) {
-    return c.redirect(`/admin/paket?error=Gagal+menambah+paket.+ID+mungkin+sudah+ada.`)
+    c.set('jwtPayload', decoded)
+    await next()
+  } catch (err) {
+    return c.redirect('/loginadmin')
   }
 })
 
-// UPDATE PAKET (EDIT)
-adminPaketApi.post('/update', async (c) => {
+// POST: Tambah Paket Baru
+adminPaketApi.post('/create', async (c) => {
+  const db = c.env.DB
   try {
-    const db = c.env.DB
     const formData = await c.req.formData()
-    
-    await db.prepare(`
-      UPDATE packages SET 
-        name = ?, 
-        registration_fee = ?, 
-        discount_percentage = ?, 
-        sponsor_bonus_amount = ?, 
-        hu_count = ?, 
-        product_count = ?, 
-        network_bonus_eligible = ?
-      WHERE id = ?
-    `).bind(
-      String(formData.get('name')),
-      Number(formData.get('registration_fee')) || 0,
-      Number(formData.get('discount_percentage')) || 0,
-      Number(formData.get('sponsor_bonus_amount')) || 0,
-      Number(formData.get('hu_count')) || 1,
-      Number(formData.get('product_count')) || 1,
-      formData.get('network_bonus_eligible') ? 1 : 0,
-      String(formData.get('id'))
-    ).run()
+    const id = 'pkg_' + Date.now().toString()
+    const name = String(formData.get('name') || '').trim()
+    const price = Number(formData.get('price')) || 0
+    const pv = Number(formData.get('pv')) || 0
+    const point = Number(formData.get('point')) || 0
+    const maxPairing = Number(formData.get('max_pairing_per_day')) || 0
+    const maxCashback = Number(formData.get('max_cashback')) || 0
+    const roTarget = Number(formData.get('ro_target_per_month')) || 0
+    const sponsorLevels = String(formData.get('sponsor_levels') || '[]').trim()
 
-    return c.redirect('/admin/paket?success=Paket+Kemitraan+berhasil+diperbarui')
-  } catch (err: any) {
-    return c.redirect(`/admin/paket?error=Gagal+memperbarui+paket`)
-  }
-})
-
-// HAPUS PAKET
-adminPaketApi.post('/delete', async (c) => {
-  try {
-    const db = c.env.DB
-    const formData = await c.req.formData()
-    const paketId = String(formData.get('id'))
-
-    const checkUser = await db.prepare("SELECT id FROM users WHERE package_id = ?").bind(paketId).first()
-    if (checkUser) {
-      return c.redirect('/admin/paket?error=Gagal+menghapus:+Ada+member+yang+sedang+menggunakan+paket+ini.')
+    // Validasi ketat format JSON Array untuk Persentase Sponsor
+    try {
+      const parsedSponsor = JSON.parse(sponsorLevels)
+      if (!Array.isArray(parsedSponsor)) throw new Error("Bukan array")
+    } catch {
+      throw new Error("Format Persentase Sponsor harus berupa JSON Array, contoh yang benar: [10, 5, 3]")
     }
 
-    await db.prepare("DELETE FROM packages WHERE id = ?").bind(paketId).run()
-    return c.redirect('/admin/paket?success=Paket+berhasil+dihapus+permanen')
-  } catch (err) {
-    return c.redirect('/admin/paket?error=Terjadi+kesalahan+sistem')
+    if (!name || price <= 0) {
+      throw new Error("Nama dan Harga paket tidak boleh kosong atau nol.")
+    }
+
+    // Injeksi database dengan paksaan Waktu WIB (UTC+7)
+    await db.prepare(`
+      INSERT INTO packages (id, name, price, pv, point, max_pairing_per_day, max_cashback, ro_target_per_month, sponsor_levels, is_active, created_at, updated_at) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, DATETIME('now', '+7 hours'), DATETIME('now', '+7 hours'))
+    `).bind(
+      id, name, price, pv, point, maxPairing, maxCashback, roTarget, sponsorLevels
+    ).run()
+
+    return c.redirect('/admin/paket?success=Paket+kemitraan+baru+berhasil+ditambahkan')
+  } catch (err: any) {
+    return c.redirect(`/admin/paket?error=${encodeURIComponent(err.message)}`)
+  }
+})
+
+// POST: Update Paket
+adminPaketApi.post('/update', async (c) => {
+  const db = c.env.DB
+  try {
+    const formData = await c.req.formData()
+    const id = String(formData.get('id'))
+    const name = String(formData.get('name') || '').trim()
+    const price = Number(formData.get('price')) || 0
+    const pv = Number(formData.get('pv')) || 0
+    const point = Number(formData.get('point')) || 0
+    const maxPairing = Number(formData.get('max_pairing_per_day')) || 0
+    const maxCashback = Number(formData.get('max_cashback')) || 0
+    const roTarget = Number(formData.get('ro_target_per_month')) || 0
+    const sponsorLevels = String(formData.get('sponsor_levels') || '[]').trim()
+    const isActive = formData.get('is_active') ? 1 : 0
+
+    // Validasi ketat format JSON Array untuk Persentase Sponsor
+    try {
+      const parsedSponsor = JSON.parse(sponsorLevels)
+      if (!Array.isArray(parsedSponsor)) throw new Error("Bukan array")
+    } catch {
+      throw new Error("Format Persentase Sponsor harus berupa JSON Array, contoh yang benar: [10, 5, 3]")
+    }
+
+    // Update database dengan paksaan Waktu WIB (UTC+7)
+    await db.prepare(`
+      UPDATE packages SET 
+      name = ?, price = ?, pv = ?, point = ?, max_pairing_per_day = ?, max_cashback = ?, ro_target_per_month = ?, sponsor_levels = ?, is_active = ?, updated_at = DATETIME('now', '+7 hours')
+      WHERE id = ?
+    `).bind(
+      name, price, pv, point, maxPairing, maxCashback, roTarget, sponsorLevels, isActive, id
+    ).run()
+
+    return c.redirect('/admin/paket?success=Data+paket+berhasil+diperbarui')
+  } catch (err: any) {
+    return c.redirect(`/admin/paket?error=${encodeURIComponent(err.message)}`)
+  }
+})
+
+// POST: Hapus Paket
+adminPaketApi.post('/delete', async (c) => {
+  const db = c.env.DB
+  try {
+    const formData = await c.req.formData()
+    const id = String(formData.get('id'))
+    
+    // Validasi: Jangan hapus jika ada member yang menggunakan paket ini
+    const checkUser = await db.prepare("SELECT id FROM users WHERE package_id = ?").bind(id).first()
+    if (checkUser) {
+        throw new Error("Gagal menghapus! Paket ini sedang digunakan oleh member aktif.")
+    }
+
+    await db.prepare("DELETE FROM packages WHERE id = ?").bind(id).run()
+    return c.redirect('/admin/paket?success=Paket+berhasil+dihapus+secara+permanen')
+  } catch (err: any) {
+    return c.redirect(`/admin/paket?error=${encodeURIComponent(err.message)}`)
   }
 })
 
