@@ -14,9 +14,7 @@ memberPinApi.use('*', async (c, next) => {
   await next()
 })
 
-// =========================================================================
 // MESIN 1: BUAT ORDER PEMBELIAN PAKET (GENERATE INVOICE & SNAP MIDTRANS)
-// =========================================================================
 memberPinApi.post('/buy', async (c) => {
   const db = c.env.DB
   const payload = c.get('jwtPayload')
@@ -24,7 +22,6 @@ memberPinApi.post('/buy', async (c) => {
   const packageId = String(formData.get('package_id'))
 
   try {
-    // Menggunakan kolom 'price' sesuai skema database baru
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
     if (!pkg) throw new Error("Paket tidak ditemukan")
 
@@ -34,16 +31,16 @@ memberPinApi.post('/buy', async (c) => {
     // Buat Invoice Order
     const orderId = crypto.randomUUID()
     const invoiceNumber = `INV-PIN-${Date.now()}`
-    const amount = Number(pkg.price)
+    const amount = Number(pkg.price) // Menggunakan price sesuai skema baru
     const pvAmount = Number(pkg.pv)
 
-    // Disesuaikan dengan tabel 'orders' skema baru
+    // Menyuntikkan placeholder untuk shipping_address agar lolos validasi NOT NULL database
+    // (Disesuaikan dengan field tabel orders di skema PV baru + WIB)
     await db.prepare(`
       INSERT INTO orders (id, user_id, order_type, total_amount, total_pv, status, payment_method, payment_reference, created_at, updated_at) 
       VALUES (?, ?, 'buy_pin', ?, ?, 'pending', 'Midtrans', ?, DATETIME('now', '+7 hours'), DATETIME('now', '+7 hours'))
     `).bind(orderId, user.id, amount, pvAmount, invoiceNumber).run()
 
-    // Disesuaikan dengan tabel 'order_items' skema baru
     await db.prepare(`
       INSERT INTO order_items (id, order_id, package_id, quantity, price_per_item, pv_per_item, created_at) 
       VALUES (?, ?, ?, 1, ?, ?, DATETIME('now', '+7 hours'))
@@ -105,9 +102,7 @@ memberPinApi.post('/buy', async (c) => {
   }
 })
 
-// =========================================================================
-// MESIN 2: AKTIVASI PIN KE JARINGAN (VALIDASI CROSSLINE + PV + MULTI-LEVEL)
-// =========================================================================
+// MESIN 2: AKTIVASI PIN KE JARINGAN (VALIDASI CROSSLINE + INJEKSI PV & MULTI-GEN SPONSOR)
 memberPinApi.post('/activate', async (c) => {
   const db = c.env.DB
   const payload = c.get('jwtPayload')
@@ -121,9 +116,9 @@ memberPinApi.post('/activate', async (c) => {
 
   try {
     const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
-    if (!user) throw new Error("Sesi pengguna tidak valid.")
+    if (!user) throw new Error("Akses HU Ditolak")
     
-    // 1. Validasi Kepemilikan PIN (Sesuai kolom di skema final: owner_id & status = 'active')
+    // 1. Validasi Kepemilikan PIN (Sesuai Skema Database Baru: owner_id dan status)
     const pin = await db.prepare(`
       SELECT p.id, p.package_id, pk.pv, pk.price, pk.sponsor_levels 
       FROM activation_pins p
@@ -147,17 +142,18 @@ memberPinApi.post('/activate', async (c) => {
     while(currentId) {
       if (currentId === user.id) { isDownline = true; break; }
       const parent = await db.prepare("SELECT upline_id FROM users WHERE id = ?").bind(currentId).first()
-      if (parent && parent.upline_id) { currentId = parent.upline_id as string } else { break; }
+      if (parent && parent.upline_id) { currentId = parent.upline_id } else { break; }
     }
     if (!isDownline && upline.id !== user.id) throw new Error("Pelanggaran Cross-Line! Anda hanya bisa meletakkan HU baru di bawah jaringan Anda sendiri.")
 
-    // 5. Generate HMMxxxxxxxx Baru Tanpa Tabel Sequencer Eksternal
+    // 5. Generate HMMxxxxxxxxxx Baru (Diadaptasi karena tabel hu_sequence dihapus di skema baru)
     const lastUser = await db.prepare("SELECT hu_id FROM users WHERE hu_id LIKE 'HMM%' ORDER BY CAST(SUBSTR(hu_id, 4) AS INTEGER) DESC LIMIT 1").first()
     let nextNum = 1
     if (lastUser && lastUser.hu_id) {
       nextNum = parseInt(String(lastUser.hu_id).replace('HMM', '')) + 1
     }
-    const newHuId = 'HMM' + nextNum.toString().padStart(7, '0')
+    // PadStart 10 agar formatnya sama persis HMMxxxxxxxxxx
+    const newHuId = `HMM${String(nextNum).padStart(10, '0')}`
     const newUserId = 'usr_' + crypto.randomUUID()
 
     const encoder = new TextEncoder()
@@ -166,7 +162,7 @@ memberPinApi.post('/activate', async (c) => {
 
     const statements = []
 
-    // 6. Eksekusi Aktivasi Otomatis Mengunci Level/Paket (Sponsor_id adalah user yang login)
+    // 6. Eksekusi Aktivasi Otomatis Mengunci Level/Paket + WIB Time
     statements.push(
       db.prepare(`
         INSERT INTO users (id, hu_id, password_hash, role, full_name, package_id, sponsor_id, upline_id, network_position, status, created_at, updated_at)
@@ -187,7 +183,7 @@ memberPinApi.post('/activate', async (c) => {
     let treeQueries = []
     
     while (currentUp && safetyCounter < 1000) {
-      if (currentPos === 'left') {
+      if (currentPos === 'left' || currentPos === 'kiri') {
         treeQueries.push(db.prepare("UPDATE users SET pv_left_today = pv_left_today + ?, reward_pv_left = reward_pv_left + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUp))
       } else {
         treeQueries.push(db.prepare("UPDATE users SET pv_right_today = pv_right_today + ?, reward_pv_right = reward_pv_right + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUp))
@@ -202,13 +198,13 @@ memberPinApi.post('/activate', async (c) => {
     statements.push(...treeQueries)
 
     // ====================================================================
-    // 8. MESIN BONUS SPONSOR MULTI-GENERASI (Berdasarkan JSON Plan B)
+    // 8. MESIN BONUS SPONSOR MULTI-GENERASI (Berdasarkan JSON)
     // ====================================================================
     let sponsorLevelsPct: number[] = []
     try {
       sponsorLevelsPct = JSON.parse(String(pin.sponsor_levels))
     } catch {
-      sponsorLevelsPct = [10] // Fallback jika gagal baca json
+      sponsorLevelsPct = [10] // Fallback 10% jika JSON kosong
     }
 
     let currentSponsorId = user.id as string
@@ -235,7 +231,7 @@ memberPinApi.post('/activate', async (c) => {
       currentSponsorId = nextSponsor.sponsor_id as string
     }
 
-    // Jalankan seluruh proses insert/update dalam 1 waktu (Atomic)
+    // Eksekusi Semua Transaksi Database (Batch Atomic)
     await db.batch(statements)
 
     return c.redirect(`/member/pin?success=Aktivasi+Sukses!+HU+Baru+Telah+Lahir:+${newHuId}`)
