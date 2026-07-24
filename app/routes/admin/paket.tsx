@@ -75,7 +75,7 @@ export default createRoute(async (c) => {
                   </td>
                   <td class="px-5 py-4 text-right space-x-3 whitespace-nowrap">
                     <button type="button" onclick={`openEditModal('${p.id}', '${p.name}', ${p.price}, ${p.pv}, ${p.point}, ${p.max_pairing_per_day}, ${p.max_cashback}, ${p.ro_target_per_month}, '${p.sponsor_levels}', ${p.is_active})`} class="text-blue-400 hover:text-blue-300 font-bold text-xs uppercase tracking-wider cursor-pointer">Edit</button>
-                    <form method="POST" action="/api/admin/paket/delete" class="inline" onsubmit="return confirm('Yakin ingin menghapus paket ini secara permanen?')">
+                    <form method="POST" action="/api/admin/paket/delete" enctype="multipart/form-data" class="inline" onsubmit="return confirm('Yakin ingin menghapus paket ini secara permanen?')">
                       <input type="hidden" name="id" value={p.id} />
                       <button type="submit" class="text-red-400 hover:text-red-300 font-bold text-xs uppercase tracking-wider cursor-pointer">Hapus</button>
                     </form>
@@ -94,7 +94,7 @@ export default createRoute(async (c) => {
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Tambah Paket Kemitraan</h4>
             <button onclick="document.getElementById('createModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
-          <form method="POST" action="/api/admin/paket/create" class="p-6">
+          <form method="POST" action="/api/admin/paket/create" enctype="multipart/form-data" class="p-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="md:col-span-2">
                 <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Nama Paket</label>
@@ -144,7 +144,7 @@ export default createRoute(async (c) => {
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Edit Paket Kemitraan</h4>
             <button onclick="document.getElementById('editModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
-          <form method="POST" action="/api/admin/paket/update" class="p-6">
+          <form method="POST" action="/api/admin/paket/update" enctype="multipart/form-data" class="p-6">
             <input type="hidden" name="id" id="edit_id" />
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="md:col-span-2">
