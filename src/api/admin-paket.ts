@@ -12,26 +12,28 @@ adminPaketApi.use('/*', async (c, next) => {
     const decoded: any = await verify(token, c.env.JWT_SECRET, 'HS256')
     if (decoded.role !== 'admin') return c.redirect('/member')
     c.set('jwtPayload', decoded)
-    await next()
   } catch (err) {
     return c.redirect('/loginadmin')
   }
+  // PERBAIKAN MUTLAK: Wajib pakai return agar tidak memicu error Promise Cloudflare 1101
+  return await next()
 })
 
 // POST: Tambah Paket Baru
 adminPaketApi.post('/create', async (c) => {
   const db = c.env.DB
   try {
-    const formData = await c.req.formData()
+    // PERBAIKAN: Gunakan parseBody agar kebal terhadap error enctype dari form HTML
+    const body = await c.req.parseBody()
     const id = 'pkg_' + Date.now().toString()
-    const name = String(formData.get('name') || '').trim()
-    const price = Number(formData.get('price')) || 0
-    const pv = Number(formData.get('pv')) || 0
-    const point = Number(formData.get('point')) || 0
-    const maxPairing = Number(formData.get('max_pairing_per_day')) || 0
-    const maxCashback = Number(formData.get('max_cashback')) || 0
-    const roTarget = Number(formData.get('ro_target_per_month')) || 0
-    const sponsorLevels = String(formData.get('sponsor_levels') || '[]').trim()
+    const name = String(body['name'] || '').trim()
+    const price = Number(body['price']) || 0
+    const pv = Number(body['pv']) || 0
+    const point = Number(body['point']) || 0
+    const maxPairing = Number(body['max_pairing_per_day']) || 0
+    const maxCashback = Number(body['max_cashback']) || 0
+    const roTarget = Number(body['ro_target_per_month']) || 0
+    const sponsorLevels = String(body['sponsor_levels'] || '[]').trim()
 
     // Validasi ketat format JSON Array untuk Persentase Sponsor
     try {
@@ -63,17 +65,17 @@ adminPaketApi.post('/create', async (c) => {
 adminPaketApi.post('/update', async (c) => {
   const db = c.env.DB
   try {
-    const formData = await c.req.formData()
-    const id = String(formData.get('id'))
-    const name = String(formData.get('name') || '').trim()
-    const price = Number(formData.get('price')) || 0
-    const pv = Number(formData.get('pv')) || 0
-    const point = Number(formData.get('point')) || 0
-    const maxPairing = Number(formData.get('max_pairing_per_day')) || 0
-    const maxCashback = Number(formData.get('max_cashback')) || 0
-    const roTarget = Number(formData.get('ro_target_per_month')) || 0
-    const sponsorLevels = String(formData.get('sponsor_levels') || '[]').trim()
-    const isActive = formData.get('is_active') ? 1 : 0
+    const body = await c.req.parseBody()
+    const id = String(body['id'])
+    const name = String(body['name'] || '').trim()
+    const price = Number(body['price']) || 0
+    const pv = Number(body['pv']) || 0
+    const point = Number(body['point']) || 0
+    const maxPairing = Number(body['max_pairing_per_day']) || 0
+    const maxCashback = Number(body['max_cashback']) || 0
+    const roTarget = Number(body['ro_target_per_month']) || 0
+    const sponsorLevels = String(body['sponsor_levels'] || '[]').trim()
+    const isActive = body['is_active'] ? 1 : 0
 
     // Validasi ketat format JSON Array untuk Persentase Sponsor
     try {
@@ -102,8 +104,8 @@ adminPaketApi.post('/update', async (c) => {
 adminPaketApi.post('/delete', async (c) => {
   const db = c.env.DB
   try {
-    const formData = await c.req.formData()
-    const id = String(formData.get('id'))
+    const body = await c.req.parseBody()
+    const id = String(body['id'])
     
     // Validasi: Jangan hapus jika ada member yang menggunakan paket ini
     const checkUser = await db.prepare("SELECT id FROM users WHERE package_id = ?").bind(id).first()
