@@ -10,8 +10,17 @@ export default createRoute(async (c) => {
   try { admin = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/loginadmin') }
 
   const db = c.env.DB
-  // Mengambil daftar paket, urutkan berdasarkan harga
-  const { results: packages } = await db.prepare("SELECT * FROM packages ORDER BY price ASC").all()
+  let packages: any[] = []
+  let pageError = ""
+
+  // PELINDUNG ANTI-500: Jika database gagal, tampilkan error di layar, bukan layar putih!
+  try {
+    const { results } = await db.prepare("SELECT * FROM packages ORDER BY price ASC").all()
+    packages = results || []
+  } catch (err: any) {
+    console.error("\n[SSR FATAL ERROR] Gagal load database paket:", err.message, "\n")
+    pageError = err.message || "Gagal memuat data dari database."
+  }
 
   const successMsg = c.req.query('success')
   const errorMsg = c.req.query('error')
@@ -29,6 +38,7 @@ export default createRoute(async (c) => {
         </button>
       </div>
 
+      {pageError && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold uppercase">DB ERROR: {pageError}</div>}
       {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
       {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
 
@@ -51,21 +61,21 @@ export default createRoute(async (c) => {
               ) : packages.map((p: any) => (
                 <tr class="hover:bg-[#1A1E26] transition-colors">
                   <td class="px-5 py-4">
-                    <p class="font-bold text-white text-sm">{p.name}</p>
+                    <p class="font-bold text-white text-sm">{p.name || '-'}</p>
                     <p class="text-[10px] text-[#8B949E] font-mono mt-1">ID: {p.id}</p>
                   </td>
                   <td class="px-5 py-4">
-                    <p class="font-black text-emerald-400 whitespace-nowrap">Rp {p.price.toLocaleString('id-ID')}</p>
-                    <p class="text-xs text-blue-400 font-bold mt-1 whitespace-nowrap">PV: {p.pv} | Poin: {p.point}</p>
+                    <p class="font-black text-emerald-400 whitespace-nowrap">Rp {Number(p.price || 0).toLocaleString('id-ID')}</p>
+                    <p class="text-xs text-blue-400 font-bold mt-1 whitespace-nowrap">PV: {p.pv || 0} | Poin: {p.point || 0}</p>
                   </td>
                   <td class="px-5 py-4 whitespace-nowrap">
-                    <p class="text-xs text-white"><span class="text-[#8B949E]">Pairing:</span> Max {p.max_pairing_per_day} Ps/hr</p>
-                    <p class="text-xs text-white mt-1"><span class="text-[#8B949E]">CB Global:</span> Rp {p.max_cashback.toLocaleString('id-ID')}</p>
-                    <p class="text-[10px] text-yellow-500 font-bold mt-1 bg-yellow-500/10 px-2 py-0.5 rounded w-fit">Auto-RO: Rp {p.ro_target_per_month.toLocaleString('id-ID')}</p>
+                    <p class="text-xs text-white"><span class="text-[#8B949E]">Pairing:</span> Max {p.max_pairing_per_day || 0} Ps/hr</p>
+                    <p class="text-xs text-white mt-1"><span class="text-[#8B949E]">CB Global:</span> Rp {Number(p.max_cashback || 0).toLocaleString('id-ID')}</p>
+                    <p class="text-[10px] text-yellow-500 font-bold mt-1 bg-yellow-500/10 px-2 py-0.5 rounded w-fit">Auto-RO: Rp {Number(p.ro_target_per_month || 0).toLocaleString('id-ID')}</p>
                   </td>
                   <td class="px-5 py-4">
                     <div class="bg-[#0B0E14] border border-[#2D3342] px-3 py-1.5 rounded inline-block font-mono text-xs text-white">
-                      {p.sponsor_levels}
+                      {p.sponsor_levels || '[]'}
                     </div>
                   </td>
                   <td class="px-5 py-4">
@@ -87,13 +97,13 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* MODAL CREATE PAKET BARU */}
       <dialog id="createModal" class="bg-transparent m-auto p-0 w-[95vw] max-w-2xl backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
         <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative text-left">
           <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731] flex justify-between items-center">
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Tambah Paket Kemitraan</h4>
             <button onclick="document.getElementById('createModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
+          {/* WAJIB ADA ENCTYPE AGAR API BISA BACA */}
           <form method="POST" action="/api/admin/paket/create" enctype="multipart/form-data" class="p-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="md:col-span-2">
@@ -137,13 +147,13 @@ export default createRoute(async (c) => {
         </div>
       </dialog>
 
-      {/* MODAL EDIT PAKET */}
       <dialog id="editModal" class="bg-transparent m-auto p-0 w-[95vw] max-w-2xl backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
         <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative text-left">
           <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731] flex justify-between items-center">
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Edit Paket Kemitraan</h4>
             <button onclick="document.getElementById('editModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
+          {/* WAJIB ADA ENCTYPE AGAR API BISA BACA */}
           <form method="POST" action="/api/admin/paket/update" enctype="multipart/form-data" class="p-6">
             <input type="hidden" name="id" id="edit_id" />
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
