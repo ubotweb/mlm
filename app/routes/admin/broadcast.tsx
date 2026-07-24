@@ -5,26 +5,42 @@ import { AdminLayout } from '../../components/AdminLayout'
 
 export default createRoute(async (c) => {
   const token = getCookie(c, 'auth_token')
-  if (!token) return c.redirect('/login')
-  let profile: any
+  if (!token) return c.redirect('/loginadmin')
+  
+  let admin: any
   try {
-    profile = await verify(token, c.env.JWT_SECRET, 'HS256')
-    if (profile.role !== 'admin') return c.redirect('/member')
-  } catch (err) { return c.redirect('/login') }
+    admin = await verify(token, c.env.JWT_SECRET, 'HS256')
+    if (admin.role !== 'admin') return c.redirect('/member')
+  } catch (err) { 
+    return c.redirect('/loginadmin') 
+  }
 
   const db = c.env.DB
-  const { results: broadcasts } = await db.prepare("SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT 20").all()
+  let broadcasts: any[] = []
+  let pageError = ""
+
+  // PELINDUNG ANTI-500: Mencegah layar putih jika tabel 'broadcasts' belum dibuat
+  try {
+    const { results } = await db.prepare("SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT 20").all()
+    broadcasts = results || []
+  } catch (err: any) {
+    console.error("\n[SSR FATAL ERROR] Gagal load tabel broadcasts:", err.message, "\n")
+    pageError = "Tabel broadcasts tidak ditemukan di database. Pastikan Anda sudah membuat tabelnya. (" + err.message + ")"
+  }
   
   const successMsg = c.req.query('success')
   const errorMsg = c.req.query('error')
 
   return c.render(
-    <AdminLayout profile={profile} activeMenu="Broadcast Notifikasi">
+    // PERBAIKAN PROP: Menggunakan 'admin={admin}' sesuai dengan AdminLayout Anda
+    <AdminLayout admin={admin} activeMenu="Broadcast Notifikasi">
       <div class="mb-6">
         <h2 class="text-2xl font-bold text-white">Broadcast Notifikasi</h2>
         <p class="text-[#8B949E] text-sm mt-1">Kirim pesan massal ke seluruh member atau grup paket spesifik.</p>
       </div>
 
+      {/* Menampilkan error database langsung di UI, BUKAN layar putih 500 */}
+      {pageError && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-6 text-sm font-bold uppercase">DB ERROR: {pageError}</div>}
       {successMsg && <div class="bg-[#00E676]/10 border border-[#00E676]/30 text-[#00E676] p-4 rounded-lg mb-6 text-sm font-bold">{successMsg}</div>}
       {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-6 text-sm font-bold">{errorMsg}</div>}
 
@@ -34,7 +50,8 @@ export default createRoute(async (c) => {
           <div class="bg-[#1A1E26] px-6 py-4 border-b border-[#222731]">
             <h4 class="font-bold text-white text-sm">Kirim Pesan Baru</h4>
           </div>
-          <form method="POST" action="/api/admin/broadcasts" class="p-6 space-y-4">
+          {/* WAJIB MENAMBAHKAN ENCTYPE AGAR API TIDAK CRASH */}
+          <form method="POST" action="/api/admin/broadcast" enctype="multipart/form-data" class="p-6 space-y-4">
             <div>
               <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Target Penerima</label>
               <select name="targetAudience" class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none uppercase text-xs font-bold">
@@ -53,7 +70,7 @@ export default createRoute(async (c) => {
               <label class="block text-xs font-bold text-[#8B949E] uppercase tracking-wider mb-2">Isi Pesan</label>
               <textarea name="message" required rows={5} class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-lg px-4 py-3 focus:outline-none"></textarea>
             </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-colors text-sm shadow-lg shadow-blue-600/20">Kirim Broadcast</button>
+            <button type="submit" disabled={!!pageError} class="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-[#2D3342] disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors text-sm shadow-lg shadow-blue-600/20">Kirim Broadcast</button>
           </form>
         </div>
 
