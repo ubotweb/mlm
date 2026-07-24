@@ -6,81 +6,117 @@ webhookApi.post('/payment-callback', async (c) => {
   const db = c.env.DB
   
   try {
-    const payload = await c.req.json()
-    // Contoh untuk Midtrans, parameter biasanya berupa order_id dan transaction_status
-    const { order_id, transaction_status, signature_key } = payload
+    // 1. Tangkap payload JSON dari Midtrans
+    const body = await c.req.json()
+    
+    // order_id dari Midtrans adalah payment_reference di database kita
+    const orderId = body.order_id 
+    const transactionStatus = body.transaction_status
+    const fraudStatus = body.fraud_status
+    const grossAmount = body.gross_amount
+    const signatureKey = body.signature_key
+    const statusCode = body.status_code
 
-    // TODO: Verifikasi signature_key di sini untuk keamanan menggunakan payment_server_key dari DB/Env
+    // 2. Ambil Server Key dari tabel site_settings untuk validasi keamanan
+    const serverKeyObj = await db.prepare("SELECT value FROM site_settings WHERE key = 'midtrans_server_key'").first()
+    const serverKey = serverKeyObj ? String(serverKeyObj.value) : ''
 
-    if (transaction_status === 'settlement' || transaction_status === 'capture') {
+    if (!serverKey) {
+      console.error("[WEBHOOK ERROR] Server key tidak ditemukan di database.")
+      return c.json({ error: "Server key tidak ditemukan" }, 500)
+    }
+
+    // 3. Validasi Signature Key (Keamanan Mutlak Anti-Fraud)
+    const encoder = new TextEncoder()
+    const dataToHash = orderId + statusCode + grossAmount + serverKey
+    const hashBuffer = await crypto.subtle.digest('SHA-512', encoder.encode(dataToHash))
+    const expectedSignature = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+    if (signatureKey !== expectedSignature) {
+      console.error(`[WEBHOOK ERROR] Signature tidak valid untuk Order: ${orderId}`)
+      return c.json({ error: "Akses Ditolak: Invalid signature" }, 403)
+    }
+
+    // 4. Cari Order berdasarkan payment_reference (Sesuai Skema newmlmku.sql)
+    const order = await db.prepare("SELECT * FROM orders WHERE payment_reference = ?").bind(orderId).first()
+    if (!order) {
+      console.error(`[WEBHOOK ERROR] Data Order tidak ditemukan: ${orderId}`)
+      return c.json({ error: "Data Order tidak ditemukan" }, 404)
+    }
+
+    // Idempotency: Jika order sudah berstatus completed, abaikan agar tidak double-insert PIN
+    if (order.status === 'completed' || order.status === 'paid') {
+      return c.json({ status: "OK", message: "Order sudah diproses sebelumnya" })
+    }
+
+    // 5. Proses Eksekusi Berdasarkan Status Transaksi Midtrans
+    if (transactionStatus === 'capture' || transactionStatus === 'settlement') {
       
-      // Kita pastikan mencari order berdasarkan ID internal atau invoice_number dari Midtrans
-      const order = await db.prepare("SELECT * FROM orders WHERE id = ? OR invoice_number = ?").bind(order_id, order_id).first()
-      
-      if (!order) {
-         return c.json({ message: 'Order tidak ditemukan di database' }, 404)
+      // Kasus khusus kartu kredit
+      if (transactionStatus === 'capture' && fraudStatus === 'challenge') {
+        await db.prepare("UPDATE orders SET status = 'challenge', updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(order.id).run()
+        return c.json({ status: "OK", message: "Transaksi Challenge" })
       }
 
-      // 1. Update status order menjadi 'paid'
-      await db.prepare(
-        "UPDATE orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-      ).bind(order.id).run()
+      // =======================================================================
+      // PEMBAYARAN SUKSES (SETTLEMENT) - CETAK PIN
+      // =======================================================================
+      const statements = []
 
-      // ====================================================================
-      // 2. MESIN CETAK PIN OTOMATIS & PENCAIRAN BONUS SPONSOR
-      // ====================================================================
-      const item = await db.prepare("SELECT * FROM order_items WHERE order_id = ? AND package_id IS NOT NULL").bind(order.id).first()
-      
-      if (item) {
-        const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(item.package_id).first()
-        const user = await db.prepare("SELECT id, hu_id FROM users WHERE id = ?").bind(order.user_id).first()
+      // 5a. Update status order menjadi completed
+      statements.push(
+        db.prepare("UPDATE orders SET status = 'completed', updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(order.id)
+      )
 
-        if (pkg && user) {
-          const huCount = Number(pkg.hu_count) || 1
-          const sponsorBonus = Number(pkg.sponsor_bonus_amount) || 0
-          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      // 5b. Jika ini adalah pembelian PIN (buy_pin), cetak PIN ke Brankas Member
+      if (order.order_type === 'buy_pin') {
+        
+        // Ambil data item yang dibeli (Join dengan tabel packages)
+        const { results: orderItems } = await db.prepare(`
+          SELECT oi.quantity, pk.id as package_id, pk.name as package_name 
+          FROM order_items oi
+          JOIN packages pk ON oi.package_id = pk.id
+          WHERE oi.order_id = ?
+        `).bind(order.id).all()
 
-          // A. Generate PIN massal sesuai jumlah HU di Paket
-          for (let i = 0; i < huCount; i++) {
-            let pinCode = `HMM-${pkg.name.toString().substring(0,3).toUpperCase()}-`
-            for(let j=0; j<8; j++) pinCode += chars.charAt(Math.floor(Math.random() * chars.length))
-            
-            const pinId = crypto.randomUUID()
-            await db.prepare(`
-              INSERT INTO activation_pins (id, pin_code, package_id, purchaser_hu_id, is_used) 
-              VALUES (?, ?, ?, ?, 0)
-            `).bind(pinId, pinCode, pkg.id, user.hu_id).run()
-          }
+        for (const item of orderItems) {
+          const qty = Number(item.quantity)
+          const pkgName = String(item.package_name)
+          const pkgId = String(item.package_id)
 
-          // B. Distribusikan Bonus Sponsor seketika ke pembeli
-          if (sponsorBonus > 0) {
-            const commId = crypto.randomUUID()
-            await db.prepare(`
-              INSERT INTO commissions (id, user_id, type, amount, description, status, order_id)
-              VALUES (?, ?, 'sponsor', ?, ?, 'released', ?)
-            `).bind(commId, user.id, sponsorBonus, `Bonus Sponsor Pembelian PIN Paket ${pkg.name}`, order.id).run()
+          // Looping untuk Generate PIN unik sesuai jumlah (quantity) yang dibeli
+          for (let i = 0; i < qty; i++) {
+            const pinId = 'pin_' + crypto.randomUUID()
+            const randomString = Math.random().toString(36).substring(2, 8).toUpperCase()
+            const pinCode = `HMM-${pkgName.substring(0, 3).toUpperCase()}-${randomString}`
 
-            await db.prepare(`UPDATE users SET balance = balance + ? WHERE id = ?`).bind(sponsorBonus, user.id).run()
+            // PERBAIKAN FATAL: Memasukkan data ke tabel activation_pins SESUAI SKEMA newmlmku
+            // Menggunakan kolom: owner_id, status = 'active'
+            statements.push(
+              db.prepare(`
+                INSERT INTO activation_pins (id, pin_code, package_id, owner_id, status, created_at) 
+                VALUES (?, ?, ?, ?, 'active', DATETIME('now', '+7 hours'))
+              `).bind(pinId, pinCode, pkgId, order.user_id)
+            )
           }
         }
       }
-      // ====================================================================
 
-      // 3. Kirim tugas ke Cloudflare Queues untuk menghitung Bonus MLM (Pasangan, Titik RO, dll)
-      // Ini mencegah timeout jika perhitungan pohon jaringan sangat dalam
-      await c.env.BONUS_QUEUE.send({
-        orderId: order.id,
-        userId: order.user_id,
-        type: 'calculate_bonus'
-      })
+      // Eksekusi semua perintah insert dan update sekaligus (Atomic Batch)
+      await db.batch(statements)
+      console.log(`[WEBHOOK SUCCESS] Order ${orderId} berhasil diselesaikan dan PIN dicetak.`)
 
-      return c.json({ message: 'Callback received, PIN generated, and processing bonus queue' }, 200)
+    } else if (transactionStatus === 'cancel' || transactionStatus === 'deny' || transactionStatus === 'expire') {
+      await db.prepare("UPDATE orders SET status = 'failed', updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(order.id).run()
+    } else if (transactionStatus === 'pending') {
+      await db.prepare("UPDATE orders SET status = 'pending', updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(order.id).run()
     }
 
-    return c.json({ message: 'Ignored status' }, 200)
-  } catch (error) {
-    console.error('Webhook error:', error)
-    return c.json({ error: 'Failed processing webhook' }, 500)
+    return c.json({ status: "OK", message: "Webhook berhasil diproses" })
+
+  } catch (err: any) {
+    console.error("[CRITICAL] Webhook Error:", err.message)
+    return c.json({ error: "Internal Server Error" }, 500)
   }
 })
 
