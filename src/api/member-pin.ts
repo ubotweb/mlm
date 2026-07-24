@@ -26,12 +26,13 @@ memberPinApi.post('/buy', async (c) => {
 
   try {
     step = "Membaca Form Data Buy";
-    const formData = await c.req.formData();
-    if (formData.get('redirect_url')) redirectUrl = String(formData.get('redirect_url'));
+    // PERBAIKAN: Menggunakan parseBody() untuk keamanan stream Hono
+    const body = await c.req.parseBody();
+    if (body['redirect_url']) redirectUrl = String(body['redirect_url']);
     
     const db = c.env.DB
     const payload = c.get('jwtPayload')
-    const packageId = String(formData.get('package_id'))
+    const packageId = String(body['package_id'])
 
     step = "Validasi Paket";
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
@@ -111,8 +112,10 @@ memberPinApi.post('/buy', async (c) => {
     }
 
   } catch (err: any) {
-    console.error(`[BUY ERROR] Tahap: ${step} | Error: ${err.message}`);
-    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(`[Tahap: ${step}] ${err.message}`)}`)
+    // PERBAIKAN: Keamanan fallback pada pesan error
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(`[BUY ERROR] Tahap: ${step} | Error: ${errorMessage}`);
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(`[Tahap: ${step}] ${errorMessage}`)}`)
   }
 })
 
@@ -130,17 +133,18 @@ memberPinApi.post('/activate', async (c) => {
 
   try {
     step = "Membaca Form Data Aktivasi";
-    const formData = await c.req.formData();
-    if (formData.get('redirect_url')) redirectUrl = String(formData.get('redirect_url'));
+    // PERBAIKAN: Menggunakan parseBody() untuk mencegah error stream body terkunci
+    const body = await c.req.parseBody();
+    if (body['redirect_url']) redirectUrl = String(body['redirect_url']);
     
     const db = c.env.DB
     const payload = c.get('jwtPayload')
     
-    const pinCode = String(formData.get('pin_code'))
-    const newName = String(formData.get('new_full_name'))
-    const newPassword = String(formData.get('new_password'))
-    const targetUplineHu = String(formData.get('upline_hu_id')).trim()
-    const position = String(formData.get('position')).toLowerCase()
+    const pinCode = String(body['pin_code'])
+    const newName = String(body['new_full_name'])
+    const newPassword = String(body['new_password'])
+    const targetUplineHu = String(body['upline_hu_id']).trim()
+    const position = String(body['position']).toLowerCase()
 
     console.log(`[DEBUG] Data Form Diterima:`);
     console.log(`  - PIN Code: ${pinCode}`);
@@ -216,19 +220,31 @@ memberPinApi.post('/activate', async (c) => {
     let currentUpPV = upline.id as string
     let currentPosPV = position
     let pvSafetyCounter = 0
-    while (currentUpPV && pvSafetyCounter < 1000) {
+    // PERBAIKAN: Menyiapkan array statement untuk batch D1 agar CPU tidak timeout
+    const batchStatements = []
+    
+    while (currentUpPV && pvSafetyCounter < 100) { // Safety constraint 100 cukup untuk kedalaman D1 dalam 1 request
       pvSafetyCounter++
       if (currentPosPV === 'left' || currentPosPV === 'kiri') {
-        await db.prepare("UPDATE users SET pv_left_today = pv_left_today + ?, reward_pv_left = reward_pv_left + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUpPV).run()
+        batchStatements.push(
+          db.prepare("UPDATE users SET pv_left_today = pv_left_today + ?, reward_pv_left = reward_pv_left + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUpPV)
+        )
       } else {
-        await db.prepare("UPDATE users SET pv_right_today = pv_right_today + ?, reward_pv_right = reward_pv_right + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUpPV).run()
+        batchStatements.push(
+          db.prepare("UPDATE users SET pv_right_today = pv_right_today + ?, reward_pv_right = reward_pv_right + ? WHERE id = ?").bind(pin.pv, pin.pv, currentUpPV)
+        )
       }
       const parentNode = await db.prepare("SELECT upline_id, network_position FROM users WHERE id = ?").bind(currentUpPV).first()
       if (!parentNode || !parentNode.upline_id) break
       currentUpPV = parentNode.upline_id as string
       currentPosPV = parentNode.network_position as string
     }
-    console.log(`[DEBUG] Mesin PV Selesai. Total Node Naik: ${pvSafetyCounter}`);
+    
+    // Mengeksekusi semua PV update secara masal (batch)
+    if (batchStatements.length > 0) {
+      await db.batch(batchStatements)
+    }
+    console.log(`[DEBUG] Mesin PV Selesai via Batch. Total Node Naik: ${pvSafetyCounter}`);
 
     step = "Mesin Bonus Sponsor Multi-Generasi";
     let sponsorLevelsPct: number[] = []
@@ -236,6 +252,9 @@ memberPinApi.post('/activate', async (c) => {
 
     let currentSponsorId = user.id as string
     let sponsorDepth = 0
+    // PERBAIKAN: Batching untuk mesin sponsor agar aman dari limit subrequest
+    const sponsorBatch = []
+    
     for (let i = 0; i < sponsorLevelsPct.length; i++) {
       sponsorDepth++
       if (!currentSponsorId) break
@@ -244,19 +263,27 @@ memberPinApi.post('/activate', async (c) => {
 
       if (bonusAmount > 0) {
         const commId = 'com_' + crypto.randomUUID()
-        await db.prepare(`
-          INSERT INTO commissions (id, user_id, source_user_id, type, amount, description, created_at) 
-          VALUES (?, ?, ?, 'sponsor', ?, ?, DATETIME('now', '+7 hours'))
-        `).bind(commId, currentSponsorId, newUserId, bonusAmount, `Bonus Sponsor Level ${i+1} dari Aktivasi ${newHuId} (${percentage}%)`).run()
+        sponsorBatch.push(
+          db.prepare(`
+            INSERT INTO commissions (id, user_id, source_user_id, type, amount, description, created_at) 
+            VALUES (?, ?, ?, 'sponsor', ?, ?, DATETIME('now', '+7 hours'))
+          `).bind(commId, currentSponsorId, newUserId, bonusAmount, `Bonus Sponsor Level ${i+1} dari Aktivasi ${newHuId} (${percentage}%)`)
+        )
         
-        await db.prepare("UPDATE users SET balance = balance + ?, updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(bonusAmount, currentSponsorId).run()
+        sponsorBatch.push(
+          db.prepare("UPDATE users SET balance = balance + ?, updated_at = DATETIME('now', '+7 hours') WHERE id = ?").bind(bonusAmount, currentSponsorId)
+        )
       }
       
       const nextSp = await db.prepare("SELECT sponsor_id FROM users WHERE id = ?").bind(currentSponsorId).first()
       if (!nextSp || !nextSp.sponsor_id) break
       currentSponsorId = nextSp.sponsor_id as string
     }
-    console.log(`[DEBUG] Mesin Sponsor Selesai. Total Kedalaman: ${sponsorDepth}`);
+    
+    if (sponsorBatch.length > 0) {
+      await db.batch(sponsorBatch)
+    }
+    console.log(`[DEBUG] Mesin Sponsor Selesai via Batch. Total Kedalaman: ${sponsorDepth}`);
 
     console.log("[DEBUG] ==========================================");
     console.log("[DEBUG] AKTIVASI SELESAI SEMPURNA");
@@ -264,13 +291,16 @@ memberPinApi.post('/activate', async (c) => {
 
     return c.redirect(`${redirectUrl}?success=Aktivasi+Sukses!+HU+Baru+Telah+Lahir:+${newHuId}`)
   } catch (err: any) {
+    // PERBAIKAN: Keamanan mutlak saat ekstraksi pesan error
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    
     console.error("\n[!!! FATAL DEBUG ERROR !!!]");
     console.error(`Gagal pada tahap : ${step}`);
-    console.error(`Pesan Error      : ${err.message}`);
+    console.error(`Pesan Error      : ${errorMessage}`);
     console.error("[!!! FATAL DEBUG ERROR !!!]\n");
 
-    // Melempar error spesifik ke layar UI Anda
-    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(`[Tahap: ${step}] ${err.message}`)}`)
+    // Melempar error spesifik ke layar UI Anda secara aman
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(`[Tahap: ${step}] ${errorMessage}`)}`)
   }
 })
 
