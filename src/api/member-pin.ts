@@ -16,12 +16,13 @@ memberPinApi.use('*', async (c, next) => {
 
 // MESIN 1: BUAT ORDER PEMBELIAN PAKET (GENERATE INVOICE & SNAP MIDTRANS)
 memberPinApi.post('/buy', async (c) => {
-  const db = c.env.DB
-  const payload = c.get('jwtPayload')
-  const formData = await c.req.formData()
-  const packageId = String(formData.get('package_id'))
-
+  // PERBAIKAN: Seluruh inisialisasi dimasukkan ke dalam try agar tidak crash 500
   try {
+    const db = c.env.DB
+    const payload = c.get('jwtPayload')
+    const formData = await c.req.formData()
+    const packageId = String(formData.get('package_id'))
+
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
     if (!pkg) throw new Error("Paket tidak ditemukan")
 
@@ -102,17 +103,18 @@ memberPinApi.post('/buy', async (c) => {
 
 // MESIN 2: AKTIVASI PIN KE JARINGAN (VALIDASI CROSSLINE)
 memberPinApi.post('/activate', async (c) => {
-  const db = c.env.DB
-  const payload = c.get('jwtPayload')
-  const formData = await c.req.formData()
-  
-  const pinCode = String(formData.get('pin_code'))
-  const newName = String(formData.get('new_full_name'))
-  const newPassword = String(formData.get('new_password'))
-  const targetUplineHu = String(formData.get('upline_hu_id')).trim()
-  const position = String(formData.get('position'))
-
+  // PERBAIKAN: Memasukkan semuanya ke dalam try
   try {
+    const db = c.env.DB
+    const payload = c.get('jwtPayload')
+    const formData = await c.req.formData()
+    
+    const pinCode = String(formData.get('pin_code'))
+    const newName = String(formData.get('new_full_name'))
+    const newPassword = String(formData.get('new_password'))
+    const targetUplineHu = String(formData.get('upline_hu_id')).trim()
+    const position = String(formData.get('position'))
+
     const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
     
     // 1. Validasi Kepemilikan PIN
@@ -150,7 +152,7 @@ memberPinApi.post('/activate', async (c) => {
     await db.prepare(`
       INSERT INTO users (id, hu_id, password_hash, role, full_name, package_id, sponsor_id, upline_id, network_position)
       VALUES (?, ?, ?, 'member', ?, ?, ?, ?, ?)
-    `).bind(newUserId, newHuId, hashedPassword, 'member', newName, pin.package_id, user.id, upline.id, position).run()
+    `).bind(newUserId, newHuId, hashedPassword, newName, pin.package_id, user.id, upline.id, position).run()
 
     await db.prepare(`UPDATE activation_pins SET is_used = 1, used_by_hu_id = ?, used_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(newHuId, pin.id).run()
 
