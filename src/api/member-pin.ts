@@ -16,26 +16,26 @@ memberPinApi.use('*', async (c, next) => {
 
 // MESIN 1: BUAT ORDER PEMBELIAN PAKET (GENERATE INVOICE & SNAP MIDTRANS)
 memberPinApi.post('/buy', async (c) => {
+  const formData = await c.req.formData()
+  // Tangkap dari halaman mana form ini dikirim
+  const redirectUrl = String(formData.get('redirect_url') || '/member/pin')
+
   try {
     const db = c.env.DB
     const payload = c.get('jwtPayload')
-    const formData = await c.req.formData()
     const packageId = String(formData.get('package_id'))
 
-    // PERBAIKAN: Mengambil price dan pv dari packages
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
     if (!pkg) throw new Error("Paket tidak ditemukan")
 
     const user = await db.prepare("SELECT id, hu_id, full_name, email, phone FROM users WHERE hu_id = ?").bind(payload.sub).first()
     if (!user) throw new Error("Akses HU Ditolak")
 
-    // Buat Invoice Order
     const orderId = crypto.randomUUID()
     const invoiceNumber = `INV-PIN-${Date.now()}`
-    const amount = Number(pkg.price) // Bukan registration_fee
+    const amount = Number(pkg.price) 
     const pvAmount = Number(pkg.pv)
 
-    // PERBAIKAN FATAL: Membuang invoice_number dan shipping_cost, mengganti dengan payment_reference dan total_pv
     await db.prepare(`
       INSERT INTO orders (id, user_id, order_type, total_amount, total_pv, status, payment_method, payment_reference, created_at, updated_at) 
       VALUES (?, ?, 'buy_pin', ?, ?, 'pending', 'Midtrans', ?, DATETIME('now', '+7 hours'), DATETIME('now', '+7 hours'))
@@ -46,7 +46,6 @@ memberPinApi.post('/buy', async (c) => {
       VALUES (?, ?, ?, 1, ?, ?, DATETIME('now', '+7 hours'))
     `).bind(crypto.randomUUID(), orderId, pkg.id, amount, pvAmount).run()
 
-    // Ambil Kunci Midtrans dari Pengaturan
     const { results: settingsData } = await db.prepare("SELECT key, value FROM site_settings WHERE key IN ('midtrans_server_key', 'midtrans_is_production')").all()
     const settings = settingsData.reduce((acc: any, curr: any) => { acc[curr.key] = curr.value; return acc; }, {})
     
@@ -80,9 +79,9 @@ memberPinApi.post('/buy', async (c) => {
           phone: user.phone || '08000000000'
         },
         callbacks: {
-          finish: `${baseUrl}/member/pin?success=Pembayaran+sedang+diproses.+Silakan+tunggu+beberapa+saat+hingga+PIN+muncul.`,
-          unfinish: `${baseUrl}/member/pin?error=Pembayaran+belum+selesai+atau+dibatalkan.`,
-          error: `${baseUrl}/member/pin?error=Pembayaran+gagal+dilakukan.`
+          finish: `${baseUrl}${redirectUrl}?success=Pembayaran+sedang+diproses.+Silakan+tunggu+beberapa+saat+hingga+PIN+muncul.`,
+          unfinish: `${baseUrl}${redirectUrl}?error=Pembayaran+belum+selesai+atau+dibatalkan.`,
+          error: `${baseUrl}${redirectUrl}?error=Pembayaran+gagal+dilakukan.`
         }
       })
     })
@@ -92,41 +91,44 @@ memberPinApi.post('/buy', async (c) => {
     if (snap.redirect_url) {
       return c.redirect(snap.redirect_url)
     } else {
-      throw new Error("Gagal mendapatkan token pembayaran dari Midtrans. Periksa konfigurasi API Key.")
+      throw new Error("Gagal mendapatkan token pembayaran dari Midtrans.")
     }
 
   } catch (err: any) {
-    return c.redirect(`/member/pin?error=${encodeURIComponent(err.message)}`)
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message)}`)
   }
 })
 
 // MESIN 2: AKTIVASI PIN KE JARINGAN
 memberPinApi.post('/activate', async (c) => {
+  const formData = await c.req.formData()
+  // Tangkap dari halaman mana form ini dikirim
+  const redirectUrl = String(formData.get('redirect_url') || '/member/pin')
+  
   try {
     const db = c.env.DB
     const payload = c.get('jwtPayload')
-    const formData = await c.req.formData()
     
     const pinCode = String(formData.get('pin_code'))
     const newName = String(formData.get('new_full_name'))
     const newPassword = String(formData.get('new_password'))
-    const targetUplineHu = String(formData.get('upline_hu_id')).trim().toUpperCase()
+    const targetUplineHu = String(formData.get('upline_hu_id')).trim()
     const position = String(formData.get('position')).toLowerCase()
 
     const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
     if (!user) throw new Error("Sesi pengguna tidak valid.")
     
-    // 1. Validasi Kepemilikan PIN (PERBAIKAN: owner_id, bukan purchaser_hu_id)
+    // 1. Validasi Kepemilikan PIN (Case Insensitive Anti-Error)
     const pin = await db.prepare(`
       SELECT p.id, p.package_id, pk.pv, pk.price, pk.sponsor_levels 
       FROM activation_pins p
       JOIN packages pk ON p.package_id = pk.id
-      WHERE p.pin_code = ? AND p.owner_id = ? AND p.status = 'active'
+      WHERE UPPER(p.pin_code) = UPPER(?) AND p.owner_id = ? AND p.status = 'active'
     `).bind(pinCode, user.id).first()
     if (!pin) throw new Error("PIN tidak valid, sudah terpakai, atau bukan milik Anda.")
 
-    // 2. Validasi Upline Target
-    const upline = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(targetUplineHu).first()
+    // 2. Validasi Upline Target (PERBAIKAN FATAL: Memecahkan bug 'admin' melalui UPPER SQL)
+    const upline = await db.prepare("SELECT id, hu_id FROM users WHERE UPPER(hu_id) = UPPER(?)").bind(targetUplineHu).first()
     if (!upline) throw new Error("ID Upline (Penempatan) tidak ditemukan.")
 
     // 3. Validasi Posisi Kaki
@@ -218,9 +220,10 @@ memberPinApi.post('/activate', async (c) => {
 
     await db.batch(statements)
 
-    return c.redirect(`/member/pin?success=Aktivasi+Sukses!+Mitra+Baru+Telah+Lahir:+${newHuId}`)
+    // PERBAIKAN: Mengembalikan Anda ke halaman asli tempat tombol ditekan
+    return c.redirect(`${redirectUrl}?success=Aktivasi+Sukses!+Mitra+Baru+Telah+Lahir:+${newHuId}`)
   } catch (err: any) {
-    return c.redirect(`/member/pin?error=${encodeURIComponent(err.message)}`)
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message)}`)
   }
 })
 
