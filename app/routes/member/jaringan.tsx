@@ -18,7 +18,13 @@ export default createRoute(async (c) => {
 
   // Logika Traversal: Ambil target HU yang ingin dilihat (Default: HU yang sedang login)
   const viewHu = c.req.query('view') || loggedInHu
-  const viewNode = await db.prepare("SELECT id, hu_id, full_name, upline_id FROM users WHERE hu_id = ?").bind(viewHu).first()
+  // [DIUBAH]: Menarik data PV dari database baru untuk node yang sedang dilihat
+  const viewNode = await db.prepare(`
+    SELECT id, hu_id, full_name, upline_id, 
+           pv_left_today, pv_right_today, sisa_pv_left, sisa_pv_right, reward_pv_left, reward_pv_right 
+    FROM users WHERE hu_id = ?
+  `).bind(viewHu).first()
+  
   if (!viewNode) return c.redirect('/member/jaringan')
 
   // Cari Upline dari viewNode untuk fitur "Naik 1 Level" (Hanya jika bukan di root milik user sendiri)
@@ -39,13 +45,13 @@ export default createRoute(async (c) => {
   const leftNode = binaryNodes.find((n: any) => n.network_position === 'left')
   const rightNode = binaryNodes.find((n: any) => n.network_position === 'right')
 
-  // Mengambil PIN yang belum terpakai milik user yang login untuk Modal Aktivasi
+  // [DIUBAH]: Mengambil PIN yang belum terpakai menyesuaikan nama kolom baru (owner_id & status = 'active')
   const { results: availablePins } = await db.prepare(`
     SELECT a.pin_code, p.name as package_name 
     FROM activation_pins a
     JOIN packages p ON a.package_id = p.id
-    WHERE a.purchaser_hu_id = ? AND a.is_used = 0
-  `).bind(loggedInHu).all()
+    WHERE a.owner_id = ? AND a.status = 'active'
+  `).bind(user.id).all()
 
   return c.render(
     <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Pohon Jaringan">
@@ -60,6 +66,30 @@ export default createRoute(async (c) => {
             Naik 1 Level
           </a>
         )}
+      </div>
+
+      {/* PANEL STATISTIK PV (Menyelipkan data PV tanpa merusak UI Jaringan Anda) */}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div class="bg-[#151921] border border-[#222731] p-5 rounded-2xl flex justify-between items-center shadow-sm">
+            <div>
+              <p class="text-[10px] font-black text-[#8B949E] uppercase tracking-widest">Kaki Kiri (Hari Ini / Sisa)</p>
+              <p class="text-xl font-black text-emerald-400 mt-1">{viewNode.pv_left_today} <span class="text-sm text-gray-500">/ {viewNode.sisa_pv_left} PV</span></p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] font-black text-[#8B949E] uppercase tracking-widest">Total Reward</p>
+              <p class="text-lg font-black text-yellow-500 mt-1">{viewNode.reward_pv_left}</p>
+            </div>
+        </div>
+        <div class="bg-[#151921] border border-[#222731] p-5 rounded-2xl flex justify-between items-center shadow-sm">
+            <div>
+              <p class="text-[10px] font-black text-[#8B949E] uppercase tracking-widest">Kaki Kanan (Hari Ini / Sisa)</p>
+              <p class="text-xl font-black text-emerald-400 mt-1">{viewNode.pv_right_today} <span class="text-sm text-gray-500">/ {viewNode.sisa_pv_right} PV</span></p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] font-black text-[#8B949E] uppercase tracking-widest">Total Reward</p>
+              <p class="text-lg font-black text-yellow-500 mt-1">{viewNode.reward_pv_right}</p>
+            </div>
+        </div>
       </div>
 
       <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-sm p-8 flex flex-col items-center">
@@ -147,7 +177,7 @@ export default createRoute(async (c) => {
             </div>
             <button onclick="document.getElementById('activationModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center">✕</button>
           </div>
-          <form method="POST" action="/api/member/pin/activate" class="p-6 space-y-4">
+          <form method="POST" action="/api/member-pin/activate" class="p-6 space-y-4">
             <input type="hidden" name="upline_hu_id" id="modal-upline" value="" />
             <input type="hidden" name="position" id="modal-position" value="" />
             
