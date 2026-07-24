@@ -10,25 +10,22 @@ export default createRoute(async (c) => {
   try { profile = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/login') }
 
   const db = c.env.DB
-  const user = await db.prepare("SELECT id, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
+  const user = await db.prepare("SELECT id, hu_id, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
   if (!user) return c.redirect('/login')
 
   // Ambil daftar Paket Aktif untuk form pembelian
-  const { results: packages } = await db.prepare("SELECT id, name, price FROM packages WHERE is_active = 1 ORDER BY price ASC").all()
+  const { results: packages } = await db.prepare("SELECT id, name, price, registration_fee FROM packages WHERE is_active = 1 ORDER BY price ASC").all()
 
-  // Ambil daftar PIN milik user (Aktif & Terpakai)
+  // Ambil daftar PIN milik user (Menggunakan kueri asli)
   const { results: pins } = await db.prepare(`
-    SELECT p.pin_code, p.status, p.created_at, p.used_at, pk.name as package_name, u.hu_id as used_by
+    SELECT p.pin_code, p.is_used, p.created_at, p.used_at, pk.name as package_name, p.used_by_hu_id as used_by
     FROM activation_pins p
     JOIN packages pk ON p.package_id = pk.id
-    LEFT JOIN users u ON p.used_by_id = u.id
-    WHERE p.owner_id = ?
+    WHERE p.purchaser_hu_id = ?
     ORDER BY p.created_at DESC
-  `).bind(user.id).all()
+  `).bind(user.hu_id).all()
 
-  // Filter PIN yang masih aktif untuk form dropdown aktivasi
-  const activePins = pins.filter((p: any) => p.status === 'active')
-
+  const activePins = pins.filter((p: any) => p.is_used === 0)
   const successMsg = c.req.query('success')
   const errorMsg = c.req.query('error')
 
@@ -74,7 +71,7 @@ export default createRoute(async (c) => {
                   <td class="px-6 py-4">
                     <div class="flex items-center space-x-3">
                       <span id={`pin-${pin.pin_code}`} class="font-mono text-emerald-400 font-bold tracking-widest">{pin.pin_code}</span>
-                      {pin.status === 'active' && (
+                      {pin.is_used === 0 && (
                         <button type="button" onclick={`navigator.clipboard.writeText('${pin.pin_code}'); alert('PIN berhasil disalin!')`} class="text-[#8B949E] hover:text-white cursor-pointer" title="Salin PIN">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                         </button>
@@ -83,13 +80,13 @@ export default createRoute(async (c) => {
                   </td>
                   <td class="px-6 py-4 font-bold text-white">{pin.package_name}</td>
                   <td class="px-6 py-4">
-                    <span class={`inline-block px-2.5 py-1 text-[10px] rounded border font-black uppercase tracking-widest ${pin.status === 'active' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-[#222731] text-gray-500 border-gray-700'}`}>
-                      {pin.status === 'active' ? 'Tersedia' : 'Terpakai'}
+                    <span class={`inline-block px-2.5 py-1 text-[10px] rounded border font-black uppercase tracking-widest ${pin.is_used === 0 ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-[#222731] text-gray-500 border-gray-700'}`}>
+                      {pin.is_used === 0 ? 'Tersedia' : 'Terpakai'}
                     </span>
                   </td>
                   <td class="px-6 py-4 text-xs text-[#8B949E] font-mono">{new Date(pin.created_at).toLocaleString('id-ID')}</td>
                   <td class="px-6 py-4">
-                    {pin.status === 'used' ? (
+                    {pin.is_used === 1 ? (
                       <div>
                         <p class="text-white font-bold">{pin.used_by}</p>
                         <p class="text-[10px] text-[#8B949E] mt-0.5 font-mono">{new Date(pin.used_at).toLocaleString('id-ID')}</p>
@@ -112,7 +109,8 @@ export default createRoute(async (c) => {
             <h4 class="font-black text-white text-sm uppercase tracking-widest text-blue-400">Beli PIN Aktivasi</h4>
             <button onclick="document.getElementById('buyPinModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
-          <form method="POST" action="/api/member-pin/buy" class="p-6 space-y-4">
+          {/* PERBAIKAN URL ACTION: Menggunakan garis miring /api/member/pin/buy */}
+          <form method="POST" action="/api/member/pin/buy" class="p-6 space-y-4">
             
             <div class="bg-blue-500/10 border border-blue-500/30 text-blue-400 p-4 rounded-xl text-xs font-medium leading-relaxed mb-2">
               Pembelian PIN akan diproses melalui <b class="text-white">Midtrans Payment Gateway</b>. Pastikan data akun Anda valid.
@@ -123,7 +121,7 @@ export default createRoute(async (c) => {
               <select name="package_id" required class="w-full bg-[#0B0E14] border border-[#2D3342] text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm cursor-pointer">
                 <option value="">-- Pilih Paket --</option>
                 {packages.map((p: any) => (
-                  <option value={p.id}>{p.name} - Rp {p.price.toLocaleString('id-ID')}</option>
+                  <option value={p.id}>{p.name} - Rp {Number(p.registration_fee || p.price).toLocaleString('id-ID')}</option>
                 ))}
               </select>
             </div>
@@ -143,7 +141,8 @@ export default createRoute(async (c) => {
             <button onclick="document.getElementById('activateModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
           
-          <form method="POST" action="/api/member-pin/activate" class="p-6">
+          {/* PERBAIKAN URL ACTION: Menggunakan garis miring /api/member/pin/activate */}
+          <form method="POST" action="/api/member/pin/activate" class="p-6">
             {activePins.length === 0 ? (
               <div class="bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 p-6 rounded-xl text-sm font-bold text-center leading-relaxed">
                 Anda tidak memiliki PIN aktif di Brankas.<br/>Silakan Beli PIN terlebih dahulu untuk mendaftarkan member.
