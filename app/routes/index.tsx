@@ -52,6 +52,7 @@ export default createRoute(async (c) => {
           HMM<span class="font-light text-white">BEAUTY</span>
         </h1>
         <div class="flex items-center space-x-3 md:space-x-4">
+          <a href="/marketing-plan" class="text-gray-300 hover:text-white font-bold transition text-sm md:text-base whitespace-nowrap">Marketing Plan</a>
           <a href="/login" class="text-gray-300 hover:text-white font-bold transition text-sm md:text-base whitespace-nowrap">Masuk Sesi</a>
           <a href={waLink} target="_blank" rel="noopener noreferrer" class="bg-emerald-500 hover:bg-emerald-600 text-[#0B0E14] px-4 py-2 md:px-5 md:py-2.5 rounded-full font-black transition-all shadow-lg shadow-emerald-500/20 uppercase tracking-wider text-xs md:text-sm whitespace-nowrap">
             Daftar Kemitraan
