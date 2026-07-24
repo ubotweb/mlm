@@ -16,14 +16,18 @@ memberPinApi.use('*', async (c, next) => {
 
 // MESIN 1: BUAT ORDER PEMBELIAN PAKET (GENERATE INVOICE & SNAP MIDTRANS)
 memberPinApi.post('/buy', async (c) => {
-  const formData = await c.req.formData()
-  // Tangkap dari halaman mana form ini dikirim
-  const redirectUrl = String(formData.get('redirect_url') || '/member/pin')
+  let redirectUrl = '/member/pin' // Default aman di luar try
 
   try {
+    // PERBAIKAN FATAL: Membaca body form di dalam try menggunakan parseBody bawaan Hono
+    const body = await c.req.parseBody()
+    if (body['redirect_url']) {
+      redirectUrl = String(body['redirect_url'])
+    }
+
     const db = c.env.DB
     const payload = c.get('jwtPayload')
-    const packageId = String(formData.get('package_id'))
+    const packageId = String(body['package_id'])
 
     const pkg = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(packageId).first()
     if (!pkg) throw new Error("Paket tidak ditemukan")
@@ -95,25 +99,30 @@ memberPinApi.post('/buy', async (c) => {
     }
 
   } catch (err: any) {
-    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message)}`)
+    // Menangkap segala error agar tidak memicu 1101 Cloudflare
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message || 'Terjadi kesalahan sistem')}`)
   }
 })
 
 // MESIN 2: AKTIVASI PIN KE JARINGAN
 memberPinApi.post('/activate', async (c) => {
-  const formData = await c.req.formData()
-  // Tangkap dari halaman mana form ini dikirim
-  const redirectUrl = String(formData.get('redirect_url') || '/member/pin')
+  let redirectUrl = '/member/pin' // Default aman di luar try
   
   try {
+    // PERBAIKAN FATAL: Membaca body form di dalam try menggunakan parseBody bawaan Hono
+    const body = await c.req.parseBody()
+    if (body['redirect_url']) {
+      redirectUrl = String(body['redirect_url'])
+    }
+    
     const db = c.env.DB
     const payload = c.get('jwtPayload')
     
-    const pinCode = String(formData.get('pin_code'))
-    const newName = String(formData.get('new_full_name'))
-    const newPassword = String(formData.get('new_password'))
-    const targetUplineHu = String(formData.get('upline_hu_id')).trim()
-    const position = String(formData.get('position')).toLowerCase()
+    const pinCode = String(body['pin_code'])
+    const newName = String(body['new_full_name'])
+    const newPassword = String(body['new_password'])
+    const targetUplineHu = String(body['upline_hu_id']).trim()
+    const position = String(body['position']).toLowerCase()
 
     const user = await db.prepare("SELECT id, hu_id FROM users WHERE hu_id = ?").bind(payload.sub).first()
     if (!user) throw new Error("Sesi pengguna tidak valid.")
@@ -125,9 +134,10 @@ memberPinApi.post('/activate', async (c) => {
       JOIN packages pk ON p.package_id = pk.id
       WHERE UPPER(p.pin_code) = UPPER(?) AND p.owner_id = ? AND p.status = 'active'
     `).bind(pinCode, user.id).first()
+    
     if (!pin) throw new Error("PIN tidak valid, sudah terpakai, atau bukan milik Anda.")
 
-    // 2. Validasi Upline Target (PERBAIKAN FATAL: Memecahkan bug 'admin' melalui UPPER SQL)
+    // 2. Validasi Upline Target (Upper Case SQL)
     const upline = await db.prepare("SELECT id, hu_id FROM users WHERE UPPER(hu_id) = UPPER(?)").bind(targetUplineHu).first()
     if (!upline) throw new Error("ID Upline (Penempatan) tidak ditemukan.")
 
@@ -220,10 +230,11 @@ memberPinApi.post('/activate', async (c) => {
 
     await db.batch(statements)
 
-    // PERBAIKAN: Mengembalikan Anda ke halaman asli tempat tombol ditekan
+    // Kembali ke halaman asal (Brankas atau Jaringan) dengan pesan sukses
     return c.redirect(`${redirectUrl}?success=Aktivasi+Sukses!+Mitra+Baru+Telah+Lahir:+${newHuId}`)
   } catch (err: any) {
-    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message)}`)
+    // Hono akan me-redirect dengan pesan error alih-alih melempar 1101 Crash
+    return c.redirect(`${redirectUrl}?error=${encodeURIComponent(err.message || 'Terjadi kesalahan sistem saat memproses form.')}`)
   }
 })
 
