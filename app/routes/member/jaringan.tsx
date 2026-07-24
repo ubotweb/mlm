@@ -11,14 +11,11 @@ export default createRoute(async (c) => {
 
   const db = c.env.DB
   
-  // Ambil data user yang sedang login untuk Layout
   const loggedInHu = profile.sub
   const user = await db.prepare("SELECT id, hu_id, full_name, balance FROM users WHERE hu_id = ?").bind(loggedInHu).first()
   if (!user) return c.redirect('/login')
 
-  // Logika Traversal: Ambil target HU yang ingin dilihat (Default: HU yang sedang login)
   const viewHu = c.req.query('view') || loggedInHu
-  // [DIUBAH]: Menarik data PV dari database baru untuk node yang sedang dilihat
   const viewNode = await db.prepare(`
     SELECT id, hu_id, full_name, upline_id, 
            pv_left_today, pv_right_today, sisa_pv_left, sisa_pv_right, reward_pv_left, reward_pv_right 
@@ -27,14 +24,12 @@ export default createRoute(async (c) => {
   
   if (!viewNode) return c.redirect('/member/jaringan')
 
-  // Cari Upline dari viewNode untuk fitur "Naik 1 Level" (Hanya jika bukan di root milik user sendiri)
   let parentHu = null
   if (viewNode.upline_id && viewHu !== loggedInHu) {
      const parent = await db.prepare("SELECT hu_id FROM users WHERE id = ?").bind(viewNode.upline_id).first()
      if (parent) parentHu = parent.hu_id
   }
 
-  // Mengambil direct downline di pohon jaringan binary (left & right) berdasarkan viewNode
   const { results: binaryNodes } = await db.prepare(`
     SELECT u.id, u.hu_id, u.full_name, u.network_position, u.status, p.name as package_name
     FROM users u
@@ -45,13 +40,15 @@ export default createRoute(async (c) => {
   const leftNode = binaryNodes.find((n: any) => n.network_position === 'left')
   const rightNode = binaryNodes.find((n: any) => n.network_position === 'right')
 
-  // [DIUBAH]: Mengambil PIN yang belum terpakai menyesuaikan nama kolom baru (owner_id & status = 'active')
   const { results: availablePins } = await db.prepare(`
     SELECT a.pin_code, p.name as package_name 
     FROM activation_pins a
     JOIN packages p ON a.package_id = p.id
     WHERE a.owner_id = ? AND a.status = 'active'
   `).bind(user.id).all()
+
+  const successMsg = c.req.query('success')
+  const errorMsg = c.req.query('error')
 
   return c.render(
     <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Pohon Jaringan">
@@ -68,7 +65,10 @@ export default createRoute(async (c) => {
         )}
       </div>
 
-      {/* PANEL STATISTIK PV (Menyelipkan data PV tanpa merusak UI Jaringan Anda) */}
+      {successMsg && <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl mb-6 text-sm font-bold">{successMsg}</div>}
+      {errorMsg && <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl mb-6 text-sm font-bold">{errorMsg}</div>}
+
+      {/* PANEL STATISTIK PV */}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div class="bg-[#151921] border border-[#222731] p-5 rounded-2xl flex justify-between items-center shadow-sm">
             <div>
@@ -167,7 +167,6 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* Modal Aktivasi PIN Bawaan HTML5 */}
       <dialog id="activationModal" class="bg-transparent m-auto p-0 w-[95vw] max-w-lg backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
         <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative text-left">
           <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731] flex justify-between items-center">
@@ -177,9 +176,12 @@ export default createRoute(async (c) => {
             </div>
             <button onclick="document.getElementById('activationModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center">✕</button>
           </div>
+          
           <form method="POST" action="/api/member-pin/activate" class="p-6 space-y-4">
             <input type="hidden" name="upline_hu_id" id="modal-upline" value="" />
             <input type="hidden" name="position" id="modal-position" value="" />
+            {/* PERBAIKAN: Melempar Anda kembali ke halaman Jaringan setelah submit */}
+            <input type="hidden" name="redirect_url" value="/member/jaringan" />
             
             <div>
                <label class="block text-[11px] font-black text-[#8B949E] uppercase tracking-widest mb-2">Pilih PIN Tersedia (Dari Brankas)</label>
