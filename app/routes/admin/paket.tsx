@@ -6,14 +6,22 @@ import { AdminLayout } from '../../components/AdminLayout'
 export default createRoute(async (c) => {
   const token = getCookie(c, 'auth_token')
   if (!token) return c.redirect('/loginadmin')
+  
   let admin: any
-  try { admin = await verify(token, c.env.JWT_SECRET, 'HS256') } catch (err) { return c.redirect('/loginadmin') }
+  try { 
+    admin = await verify(token, c.env.JWT_SECRET, 'HS256') 
+  } catch (err) { 
+    return c.redirect('/loginadmin') 
+  }
+
+  // PELINDUNG MUTLAK ANTI-CRASH SSR: Wajib diset agar _renderer.tsx tidak meledak saat membaca .sub
+  c.set('jwtPayload', admin)
 
   const db = c.env.DB
   let packages: any[] = []
   let pageError = ""
 
-  // PELINDUNG ANTI-500: Jika database gagal, tampilkan error di layar, bukan layar putih!
+  // PELINDUNG DATABASE: Jika DB error, jangan jadikan layar putih 500, tapi tampilkan pesan di UI
   try {
     const { results } = await db.prepare("SELECT * FROM packages ORDER BY price ASC").all()
     packages = results || []
@@ -26,7 +34,8 @@ export default createRoute(async (c) => {
   const errorMsg = c.req.query('error')
 
   return c.render(
-    <AdminLayout admin={admin} activeMenu="Manajemen Paket">
+    // PELINDUNG LAYOUT: Lempar admin & profile sekaligus agar jika layout memanggil profile.sub tidak akan crash!
+    <AdminLayout admin={admin} profile={admin} activeMenu="Manajemen Paket">
       <div class="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h2 class="text-3xl font-black text-white">Manajemen Paket MLM</h2>
@@ -97,13 +106,13 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
+      {/* MODAL CREATE PAKET BARU */}
       <dialog id="createModal" class="bg-transparent m-auto p-0 w-[95vw] max-w-2xl backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
         <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative text-left">
           <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731] flex justify-between items-center">
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Tambah Paket Kemitraan</h4>
             <button onclick="document.getElementById('createModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
-          {/* WAJIB ADA ENCTYPE AGAR API BISA BACA */}
           <form method="POST" action="/api/admin/paket/create" enctype="multipart/form-data" class="p-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="md:col-span-2">
@@ -147,13 +156,13 @@ export default createRoute(async (c) => {
         </div>
       </dialog>
 
+      {/* MODAL EDIT PAKET */}
       <dialog id="editModal" class="bg-transparent m-auto p-0 w-[95vw] max-w-2xl backdrop:bg-[#0B0E14]/90 backdrop:backdrop-blur-sm rounded-2xl open:animate-in open:fade-in-0 open:zoom-in-95">
         <div class="bg-[#151921] border border-[#222731] rounded-2xl overflow-hidden shadow-2xl relative text-left">
           <div class="bg-[#1A1E26] px-6 py-5 border-b border-[#222731] flex justify-between items-center">
             <h4 class="font-black text-white text-sm uppercase tracking-widest">Edit Paket Kemitraan</h4>
             <button onclick="document.getElementById('editModal').close()" class="text-[#8B949E] hover:text-white font-bold bg-[#0B0E14] border border-[#222731] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer">✕</button>
           </div>
-          {/* WAJIB ADA ENCTYPE AGAR API BISA BACA */}
           <form method="POST" action="/api/admin/paket/update" enctype="multipart/form-data" class="p-6">
             <input type="hidden" name="id" id="edit_id" />
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
