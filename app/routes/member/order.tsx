@@ -13,16 +13,16 @@ export default createRoute(async (c) => {
   const user = await db.prepare("SELECT id, balance FROM users WHERE hu_id = ?").bind(profile.sub).first()
   if (!user) return c.redirect('/login')
 
-  // [DIUBAH]: Query disesuaikan dengan skema tabel orders yang baru (order_type, total_amount, payment_reference)
+  // PERBAIKAN: Hanya mengambil payment_reference dan kolom sesuai skema baru (TANPA invoice_number)
   const { results: orders } = await db.prepare(`
-    SELECT payment_reference as invoice_number, order_type, total_amount, total_pv, status, created_at 
+    SELECT payment_reference, order_type, total_amount, total_pv, status, created_at 
     FROM orders 
     WHERE user_id = ? 
     ORDER BY created_at DESC
   `).bind(user.id).all()
 
   return c.render(
-    <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Riwayat Order">
+    <MemberLayout profile={profile} balance={(user.balance as number) || 0} activeMenu="Riwayat Transaksi">
       <div class="mb-8">
         <h2 class="text-3xl font-black text-white">Riwayat Transaksi</h2>
         <p class="text-[#8B949E] text-sm mt-1 font-medium">Pantau status pembelian PIN aktivasi dan produk Anda.</p>
@@ -33,7 +33,7 @@ export default createRoute(async (c) => {
           <table class="w-full text-left text-sm">
             <thead class="text-[#8B949E] border-b border-[#222731] bg-[#1A1E26]">
               <tr>
-                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">No. Invoice</th>
+                <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">No. Invoice / Referensi</th>
                 <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Tipe Transaksi</th>
                 <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Total Bayar</th>
                 <th class="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Total PV</th>
@@ -46,7 +46,7 @@ export default createRoute(async (c) => {
                 <tr><td colSpan={6} class="px-6 py-10 text-center text-[#8B949E] font-bold">Belum ada riwayat transaksi.</td></tr>
               ) : orders.map((o: any) => (
                 <tr class="hover:bg-[#1A1E26] transition-colors">
-                  <td class="px-6 py-4 font-mono text-emerald-400 font-bold">{o.invoice_number}</td>
+                  <td class="px-6 py-4 font-mono text-emerald-400 font-bold">{o.payment_reference || '-'}</td>
                   <td class="px-6 py-4 font-bold text-white uppercase text-xs">
                     {o.order_type === 'buy_pin' ? 'Beli PIN Aktivasi' : o.order_type}
                   </td>
